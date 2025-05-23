@@ -111,8 +111,8 @@ We’ll keep a fast release cycle to quickly deliver and polish the upcoming fea
 ## How to contribute?
 We welcome all users and developers to contribute code to RLFactory. If you have any questions, encounter bugs, or would like to collaborate on development, please feel free to contact us!
 
-1. Submit an issue directly on GitHub  
-2. Contact us via email at chaijiajun@meituan.com  
+1. Submit an issue directly on GitHub.  
+2. Contact us via email at chaijiajun@meituan.com, gjyin@outlook.com, or fuyuqian22@mails.ucas.edu.cn.
 3. Join our WeChat group and become a pioneer in Agent model training!
 <div align="center">
   <img src="https://github.com/user-attachments/assets/b91d9f2b-4eeb-4023-a933-3f6ed012a76f" alt="Description" style="width:200px; height:auto;"/>
