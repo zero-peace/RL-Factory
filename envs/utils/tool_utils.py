@@ -16,7 +16,12 @@ class ToolUtils:
         self.max_prompt_length = config.prompt_length
 
         self.pad_token_id = meta_info.get('pad_token_id')
-        self.eos_token_id = meta_info.get('eos_token_id')[0]
+        eos_token_id = meta_info.get('eos_token_id')
+        if isinstance(eos_token_id, (list, tuple)):
+            self.eos_token_id = eos_token_id[0]
+        else:
+            self.eos_token_id = eos_token_id
+        
         self.meta_info = meta_info
         self.loop_cnt = 0
 
