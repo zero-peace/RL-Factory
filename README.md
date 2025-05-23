@@ -116,6 +116,7 @@ We welcome all users and developers to contribute code to RLFactory. If you have
 3. Join our WeChat group and become a pioneer in Agent model training!
 <div align="center">
   <img src="https://github.com/user-attachments/assets/b91d9f2b-4eeb-4023-a933-3f6ed012a76f" alt="Description" style="width:200px; height:auto;"/>
+  <img src="https://github.com/user-attachments/assets/e59f1a14-faee-4ec8-97cd-5e90ff34a43d" alt="Description" style="width:200px; height:auto;"/>
 </div>
 
 
