@@ -33,7 +33,7 @@ Ground Truth: <gt>{}</gt>
         if matches:
             last_match = matches[-1]
             try:
-                result = last_match.group(1)
+                result = float(last_match.group(1))
             except:
                 result = 0.0
             return result
