@@ -33,12 +33,12 @@ python3 -m verl.trainer.main_ppo\
     actor_rollout_ref.ref.fsdp_config.param_offload=False\
     actor_rollout_ref.rollout.enforce_eager=False\
     actor_rollout_ref.rollout.free_cache_engine=False\
-    actor_rollout_ref.env.name=reward_rollout\
+    actor_rollout_ref.env.name=search\
     actor_rollout_ref.env.mcp_mode=stdio\
     actor_rollout_ref.env.tool_manager=qwen3\
     actor_rollout_ref.env.enable_thinking=False\
     actor_rollout_ref.env.config_path=/your/path/to/envs/configs/mcp_tools.pydata\
-    reward_rollout.if_use_reward_rollout=True\
+    reward_rollout.if_use_reward_rollout=False\
     reward_rollout.rollout.tensor_model_parallel_size=4\
     reward_rollout.rollout.gpu_memory_utilization=0.75\
     reward_rollout.rollout.model_name=$REWARD_MODEL_PATH\
