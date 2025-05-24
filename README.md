@@ -4,7 +4,7 @@
 
 <div align="center">
 
-[📘Tutorial](docs/rl_factory/en/main_tutorial.md) &#124; [🛠️Installation](docs/rl_factory/en/install.md) &#124; [🎨Framework](docs/rl_factory/en/framework_design.md)
+[📘Tutorial](docs/rl_factory/en/main_tutorial.md) &#124; [🛠️Installation](docs/rl_factory/en/install.md) &#124; [🎨Framework](docs/rl_factory/en/framework_design.md); [🏆Model](https://huggingface.co/Simple-Efficient/RLFactory-Qwen3-8B-GRPO)
 
 </div>
 
