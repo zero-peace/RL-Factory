@@ -17,7 +17,7 @@ RL-Factory decouples the environment from RL post-training, enabling training wi
 Current version natively supports one-click **DeepSearch** training and features multi-turn tool-calling, model judge reward, and training of multiple models including **Qwen3**. More easy and efficient agentic learning modules will be added in upcoming features.
 
 <div align="center">
-  <b>Now, everyone can easily and quickly train an Agent model with Qwen3 (as base models) and MCP tools!</b>
+  <b>Now, everyone can easily and quickly train an Agent with Qwen3 (as base models) and MCP tools!</b>
 </div>
 
 ## Our Framework Design
@@ -45,7 +45,7 @@ For **future progression**, we will continue to prioritize **"easy"** and **"eff
 We’ll keep a fast release cycle to quickly deliver and polish the upcoming features.
 + **Version 0.1**
   + **Environment decouple**: define your tool-use envinroment easily (tools setup and reward function definition)
-  + **Qwen3 Model support**: quickly train your agent model using Qwen3 (much better than Qwen2.5 in tool-call)
+  + **Qwen3 Model support**: quickly train your agent using Qwen3 (much better than Qwen2.5 in tool-call)
   + **Efficient training**: 2x faster than existing frameworks for rapid model iteration (mainly through async tool-use)
 + **Version 0.2** (within 2 weeks)
   - **WebUI**: build a WebUI for data processing, tool & environment definition, training configuration, and project management
@@ -84,7 +84,7 @@ We’ll keep a fast release cycle to quickly deliver and polish the upcoming fea
 
 ## Demo in DeepSearch Training
 + In [`docs/rl_factory/main_tutorial.md`](docs/rl_factory/main_tutorial.md), we provide an RLFactory reproduction example of [Search-R1](https://github.com/PeterGriffinJin/Search-R1). We use `Qwen3-4B` and `Qwen3-8B` as the base model for RL training. 
-+ **Easy**: Start with Qwen3 and MCP tools to quickly train your own DeepSearch Agent Model.
++ **Easy**: Start with Qwen3 and MCP tools to quickly train your own DeepSearch Agent.
   + Provide only one tool configuration and one reward function to start training! 
   + Qwen3 demonstrates significant advantages in Agent Learning. It can accurately call tools even without SFT, and it also supports the MCP protocol.
 
@@ -113,7 +113,7 @@ We welcome all users and developers to contribute code to RLFactory. If you have
 
 1. Submit an issue directly on GitHub.  
 2. Contact us via email at chaijiajun@meituan.com or gjyin@outlook.com.
-3. Join our WeChat group and become a pioneer in Agent model training!
+3. Join our WeChat group and become a pioneer in Agent training!
 <div align="center">
   <img src="https://github.com/user-attachments/assets/b91d9f2b-4eeb-4023-a933-3f6ed012a76f" alt="Description" style="width:200px; height:auto;"/>
   <img src="https://github.com/user-attachments/assets/e59f1a14-faee-4ec8-97cd-5e90ff34a43d" alt="Description" style="width:200px; height:auto;"/>
