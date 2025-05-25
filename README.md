@@ -119,7 +119,8 @@ We welcome all users and developers to contribute code to RLFactory. If you have
   <img src="https://github.com/user-attachments/assets/e59f1a14-faee-4ec8-97cd-5e90ff34a43d" alt="Description" style="width:200px; height:auto;"/>
 </div>
 
-
 ## Acknowledgement
 This repo benefits from [verl](https://github.com/volcengine/veRL), [Search-R1](https://github.com/PeterGriffinJin/Search-R1), [Qwen-Agent](https://github.com/QwenLM/Qwen-Agent). Thanks for their wonderful works. We will also introduce [TRL](https://github.com/huggingface/trl) in the future to further expand the applicability of our framework.
 
+## Star History
+[![Star History Chart](https://api.star-history.com/svg?repos=Simple-Efficient/RL-Factory&type=Date)](https://www.star-history.com/#Simple-Efficient/RL-Factory&Date)
