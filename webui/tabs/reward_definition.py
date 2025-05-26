@@ -19,16 +19,6 @@ RULE_TYPE_MAP = {
     "工具标签": "tool_call"
 }
 
-# 添加验证器映射
-VALIDATOR_TYPE_MAP = {
-    "无": None,
-    "JSON格式": "json_validator",
-    "XML格式": "xml_validator",
-    "Python代码": "python_validator",
-    "URL格式": "url_validator",
-    "邮箱格式": "email_validator"
-}
-
 def get_available_requirement_types(requirements: List[Dict], editing_requirement: Dict = None) -> List[str]:
     """获取可用的要求类型列表"""
     all_types = list(REQUIREMENT_TYPE_MAP.values())
@@ -68,12 +58,6 @@ def create_reward_definition_tab():
         with gr.Tabs() as subtabs:
             with gr.TabItem("规则定义"):
                 rule_components = create_rule_definition_tab()
-            
-            with gr.TabItem("模型评判"):
-                model_components = create_model_evaluation_tab()
-            
-            with gr.TabItem("验证工具"):
-                validation_components = create_validation_tools_tab()
         
         # 导出按钮和结果显示
         with gr.Row():
@@ -85,11 +69,7 @@ def create_reward_definition_tab():
         
         # 处理导出事件
         def export_json_handler():
-            config = generate_reward_json(
-                rule_components,
-                model_components,
-                validation_components
-            )
+            config = generate_reward_json(rule_components)
             # 保存到文件
             os.makedirs("rewards", exist_ok=True)
             json_path = f"rewards/reward_config.json"
@@ -669,10 +649,10 @@ def create_rule_definition_tab():
                 )
             
             with gr.Column(scale=1):
-                # 验证器选择下拉菜单
+                # 评分器选择下拉菜单
                 validator_type = gr.Dropdown(
-                    choices=list(VALIDATOR_TYPE_MAP.keys()),
-                    label="验证器",
+                    choices=["无"] + list(GraderRegistry.list_graders().keys()),
+                    label="评分器",
                     value="无",
                     interactive=True,
                     visible=False
@@ -687,7 +667,7 @@ def create_rule_definition_tab():
         # 规则列表显示
         rules_list = gr.State([])  # 存储已添加的规则
         rules_display = gr.DataFrame(
-            headers=["规则类型", "标签名称", "验证器", "标签要求"],
+            headers=["规则类型", "标签名称", "评分器", "标签要求"],
             label="已添加的规则",
             interactive=False,
             visible=True,
@@ -716,7 +696,7 @@ def create_rule_definition_tab():
             if row_index is None:
                 return (
                     rules,
-                    [[r["type"], r["label"], json.dumps(r["requirements"], ensure_ascii=False, indent=2)] for r in rules],
+                    [[r["type"], r["label"], r.get("grader", "无"), json.dumps(r["requirements"], ensure_ascii=False, indent=2)] for r in rules],
                     gr.update(visible=False),
                     gr.update(visible=False),
                     gr.update(choices=get_available_rule_types(rules, None), value=None)
@@ -724,7 +704,7 @@ def create_rule_definition_tab():
             
             updated_rules = rules[:row_index] + rules[row_index + 1:]
             display_data = [
-                [r["type"], r["label"], json.dumps(r["requirements"], ensure_ascii=False, indent=2)]
+                [r["type"], r["label"], r.get("grader", "无"), json.dumps(r["requirements"], ensure_ascii=False, indent=2)]
                 for r in updated_rules
             ]
             
@@ -761,7 +741,7 @@ def create_rule_definition_tab():
                 used_types = {REQUIREMENT_TYPE_MAP[r["type"]] for r in requirements}
                 available_types = [t for t in REQUIREMENT_TYPE_MAP.values() if t not in used_types]
                 # 获取当前验证器
-                current_validator = next((k for k, v in VALIDATOR_TYPE_MAP.items() if v == current_rule.get("validator")), "无")
+                current_validator = next((k for k, v in GraderRegistry.list_graders().items() if v == current_rule.get("grader")), "无")
             else:
                 requirements = []
                 requirements_display = []
@@ -816,7 +796,7 @@ def create_rule_definition_tab():
             available_requirement_types = [t for t in REQUIREMENT_TYPE_MAP.values() if t not in used_types]
             
             # 获取当前验证器
-            current_validator = next((k for k, v in VALIDATOR_TYPE_MAP.items() if v == rule.get("validator")), "无")
+            current_validator = next((k for k, v in GraderRegistry.list_graders().items() if v == rule.get("grader")), "无")
             
             # 更新界面状态
             updates = {
@@ -898,15 +878,13 @@ def create_rule_definition_tab():
             """添加或更新规则"""
             if not rule_type:
                 return (
-                    rules,
-                    [[r["type"], r["label"], r.get("validator", "无"), json.dumps(r["requirements"], ensure_ascii=False, indent=2)] for r in rules],
-                    None,
-                    "",
-                    "无",
-                    gr.update(visible=False),
-                    gr.update(visible=False),
-                    gr.update(visible=False),
-                    gr.update(choices=get_available_rule_types(rules), value=None)
+                    rules,                                          # rules_list
+                    rules_to_rows(rules),                          # rules_display
+                    None,                                          # rule_type
+                    "",                                            # label_name
+                    "无",                                          # validator_type
+                    gr.update(visible=False),                      # add_button
+                    gr.update(choices=get_available_rule_types(rules), value=None)  # rule_type更新
                 )
             
             # 验证标签名称
@@ -915,12 +893,10 @@ def create_rule_definition_tab():
                     gr.Warning("请输入自定义标签名称")
                     return (
                         rules,
-                        [[r["type"], r["label"], r.get("validator", "无"), json.dumps(r["requirements"], ensure_ascii=False, indent=2)] for r in rules],
+                        rules_to_rows(rules),
                         rule_type,
                         label_value,
                         validator_value,
-                        gr.update(visible=True),
-                        gr.update(visible=True),
                         gr.update(visible=True),
                         gr.update(choices=get_available_rule_types(rules), value=rule_type)
                     )
@@ -928,12 +904,10 @@ def create_rule_definition_tab():
                     gr.Warning("标签名称只能包含字母、数字和下划线，且不能以数字开头")
                     return (
                         rules,
-                        [[r["type"], r["label"], r.get("validator", "无"), json.dumps(r["requirements"], ensure_ascii=False, indent=2)] for r in rules],
+                        rules_to_rows(rules),
                         rule_type,
                         label_value,
                         validator_value,
-                        gr.update(visible=True),
-                        gr.update(visible=True),
                         gr.update(visible=True),
                         gr.update(choices=get_available_rule_types(rules), value=rule_type)
                     )
@@ -947,8 +921,8 @@ def create_rule_definition_tab():
             # 创建新规则
             new_rule = {
                 "type": rule_type,
-                "label": label_value,
-                "validator": VALIDATOR_TYPE_MAP[validator_value],
+                "label": RULE_TYPE_MAP.get(rule_type, label_value),
+                "grader": None if validator_value == "无" else validator_value,  # 如果选择"无"则设为None
                 "requirements": current_requirements
             }
             
@@ -960,12 +934,10 @@ def create_rule_definition_tab():
                     gr.Warning(f"标签名称 '{label_value}' 已经存在")
                     return (
                         rules,
-                        [[r["type"], r["label"], r.get("validator", "无"), json.dumps(r["requirements"], ensure_ascii=False, indent=2)] for r in rules],
+                        rules_to_rows(rules),
                         rule_type,
                         label_value,
                         validator_value,
-                        gr.update(visible=True),
-                        gr.update(visible=True),
                         gr.update(visible=True),
                         gr.update(choices=get_available_rule_types(rules), value=rule_type)
                     )
@@ -982,34 +954,24 @@ def create_rule_definition_tab():
                     gr.Warning(f"标签名称 '{label_value}' 已经存在")
                     return (
                         rules,
-                        [[r["type"], r["label"], r.get("validator", "无"), json.dumps(r["requirements"], ensure_ascii=False, indent=2)] for r in rules],
+                        rules_to_rows(rules),
                         rule_type,
                         label_value,
                         validator_value,
-                        gr.update(visible=True),
-                        gr.update(visible=True),
                         gr.update(visible=True),
                         gr.update(choices=get_available_rule_types(rules), value=rule_type)
                     )
                 updated_rules = rules + [new_rule]
             
-            # 转换为DataFrame显示格式
-            display_data = [
-                [r["type"], r["label"], r.get("validator", "无"), json.dumps(r["requirements"], ensure_ascii=False, indent=2)]
-                for r in updated_rules
-            ]
-            
             # 清空输入并隐藏控件，更新规则类型选项
             return (
-                updated_rules,
-                display_data,
-                None,  # 清空规则类型
-                "",    # 清空标签名称
-                "无",  # 重置验证器选择
-                gr.update(visible=False),  # 隐藏标签名称输入框
-                gr.update(visible=False),  # 隐藏添加按钮
-                gr.update(visible=False),  # 隐藏验证器选择
-                gr.update(choices=get_available_rule_types(updated_rules), value=None)  # 更新规则类型选项
+                updated_rules,                                     # rules_list
+                rules_to_rows(updated_rules),                     # rules_display
+                None,                                             # rule_type
+                "",                                               # label_name
+                "无",                                             # validator_type
+                gr.update(visible=False),                         # add_button
+                gr.update(choices=get_available_rule_types(updated_rules), value=None)  # rule_type更新
             )
 
         # 更新添加规则按钮的事件处理
@@ -1024,13 +986,13 @@ def create_rule_definition_tab():
                 rule_edit_mode
             ],
             outputs=[
-                rules_list,
-                rules_display,
-                rule_type,
-                label_name,
-                validator_type,
-                add_button,
-                rule_type
+                rules_list,             # 规则列表状态
+                rules_display,          # 规则显示表格
+                rule_type,              # 规则类型下拉框
+                label_name,             # 标签名称输入框
+                validator_type,         # 评分器下拉框
+                add_button,             # 添加按钮
+                rule_type              # 规则类型选项更新
             ]
         )
         
@@ -1040,28 +1002,13 @@ def create_rule_definition_tab():
         }
 
 
-def create_model_evaluation_tab():
-    """模型评判子标签页"""
-    with gr.Blocks() as tab:
-        gr.Markdown("## 模型评判")
-        # 待补充具体内容
-        return {}
-
-
-def create_validation_tools_tab():
-    """验证工具子标签页"""
-    with gr.Blocks() as tab:
-        gr.Markdown("## 验证工具")
-        # 待补充具体内容
-        return {}
-
-
-def generate_reward_json(rule_data: Dict[str, Any], model_data: Dict[str, Any], validation_data: Dict[str, Any]) -> Dict[str, Any]:
+def generate_reward_json(rule_data: Dict[str, Any]) -> Dict[str, Any]:
     """生成奖赏配置JSON"""
     reward_config = {
         "grader": {
             "type": rule_data["grader_type"]
-        }
+        },
+        "rules": rule_data["rules"]
     }
     return reward_config
 
@@ -1090,47 +1037,21 @@ class RewardFunction:
 '''
     return template
 
-def add_rule(
-    rule_type: str,
-    label_value: str,
-    requirements: List[Dict],
-    rules: List[Dict]
-) -> tuple:
-    """添加新规则"""
-    if not rule_type:
-        return rules, None
+def rules_to_rows(rules: List[Dict]) -> List[List[str]]:
+    """将规则列表转换为显示格式
     
-    # 验证标签名称
-    if rule_type == "自定义标签":
-        if not label_value:
-            gr.Warning("请输入自定义标签名称")
-            return rules, [[r["type"], r["label"], json.dumps(r["requirements"], ensure_ascii=False, indent=2)] for r in rules]
-        if not label_value.isidentifier():
-            gr.Warning("标签名称只能包含字母、数字和下划线，且不能以数字开头")
-            return rules, [[r["type"], r["label"], json.dumps(r["requirements"], ensure_ascii=False, indent=2)] for r in rules]
-    
-    # 创建新规则
-    new_rule = {
-        "type": rule_type,
-        "label": label_value,
-        "requirements": requirements
-    }
-    
-    # 更新规则列表
-    updated_rules = rules + [new_rule]
-    
-    # 转换为DataFrame显示格式
-    display_data = [
-        [r["type"], r["label"], json.dumps(r["requirements"], ensure_ascii=False, indent=2)]
-        for r in updated_rules
+    Args:
+        rules: 规则列表
+        
+    Returns:
+        List[List[str]]: 显示格式的规则列表，每行包含[规则类型, 标签名称, 评分器, 标签要求]
+    """
+    return [
+        [
+            r["type"],
+            r["label"],
+            r.get("grader", "无"),
+            json.dumps(r.get("requirements", []), ensure_ascii=False, indent=2)
+        ]
+        for r in rules
     ]
-    
-    # 清空输入并隐藏控件
-    return (
-        updated_rules,
-        display_data,
-        gr.update(value=None),  # 清空规则类型
-        gr.update(value=""),    # 清空标签名称
-        gr.update(visible=False),  # 隐藏标签名称输入框
-        gr.update(visible=False)   # 隐藏添加按钮
-    )
