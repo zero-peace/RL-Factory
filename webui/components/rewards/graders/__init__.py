@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Type, Any
 
-
 class BaseGrader(ABC):
     """奖赏评分器基类"""
     
@@ -30,7 +29,6 @@ class BaseGrader(ABC):
         """评分器描述"""
         pass
 
-
 class GraderRegistry:
     """评分器注册器"""
     
@@ -46,7 +44,10 @@ class GraderRegistry:
         Returns:
             注册的评分器类
         """
-        cls._registry[grader_class.name] = grader_class
+        # 创建一个实例来获取名称和描述
+        instance = grader_class()
+        name = instance.name
+        cls._registry[name] = grader_class
         return grader_class
     
     @classmethod
@@ -70,4 +71,13 @@ class GraderRegistry:
         Returns:
             Dict[str, str]: 评分器名称和描述的字典
         """
-        return {name: grader.description for name, grader in cls._registry.items()}
+        return {
+            name: grader_class().description 
+            for name, grader_class in cls._registry.items()
+        }
+
+# 导入所有评分器以确保它们被注册
+from .graders import *
+
+# 导出所有需要的类和函数
+__all__ = ['BaseGrader', 'GraderRegistry']
