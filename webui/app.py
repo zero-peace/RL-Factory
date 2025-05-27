@@ -20,16 +20,16 @@ def create_app():
         """)
         
         with gr.Tabs() as tabs:
-            with gr.TabItem("数据处理"):
-                create_data_processing_tab()
-            with gr.TabItem("工具定义"):
-                create_tool_definition_tab()
-            with gr.TabItem("奖赏定义"):
-                create_reward_definition_tab()
-            with gr.TabItem("训练部署"):
-                create_training_deployment_tab()
             with gr.TabItem("项目管理"):
                 create_project_management_tab()
+            with gr.TabItem("奖赏定义"):
+                create_reward_definition_tab()
+            with gr.TabItem("工具定义"):
+                create_tool_definition_tab()
+            with gr.TabItem("数据处理"):
+                create_data_processing_tab()
+            with gr.TabItem("训练部署"):
+                create_training_deployment_tab()
     
     return app
 

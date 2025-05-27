@@ -130,3 +130,4 @@ tensorboard_log
 ckpt
 
 .hopeignore
+projects/

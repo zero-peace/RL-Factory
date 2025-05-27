@@ -58,6 +58,12 @@ def create_reward_definition_tab():
         with gr.Tabs() as subtabs:
             with gr.TabItem("规则定义"):
                 rule_components = create_rule_definition_tab()
+            
+            with gr.TabItem("模型评判"):
+                model_components = create_model_evaluation_tab()
+            
+            with gr.TabItem("验证工具"):
+                validation_components = create_validation_tools_tab()
         
         # 导出按钮和结果显示
         with gr.Row():
@@ -68,13 +74,13 @@ def create_reward_definition_tab():
         output_python = gr.Code(language="python", label="生成的Python代码")
         
         # 处理导出事件
-        def export_json_handler():
-            config = generate_reward_json(rule_components)
+        def export_json_handler(rules_data: List[Dict]):
+            config = generate_reward_json(rules_data)
             # 保存到文件
             os.makedirs("rewards", exist_ok=True)
             json_path = f"rewards/reward_config.json"
-            with open(json_path, "w") as f:
-                json.dump(config, f, indent=2)
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
             return config
         
         def export_python_handler(config):
@@ -88,6 +94,7 @@ def create_reward_definition_tab():
         
         export_json.click(
             fn=export_json_handler,
+            inputs=rule_components["rules"],
             outputs=output_json
         )
         
@@ -103,6 +110,9 @@ def create_reward_definition_tab():
 def create_requirements_ui():
     """创建标签要求配置界面"""
     with gr.Group() as requirements_group:
+        # 添加当前规则类型状态
+        current_rule_type = gr.State("") 
+        
         with gr.Row(equal_height=True):
             # 要求类型选择
             requirement_type = gr.Dropdown(
@@ -171,6 +181,62 @@ def create_requirements_ui():
                     value=1.0,
                     step=0.1
                 )
+            
+            # 多评分器配置区域（仅在结果标签的格式要求时显示）
+            with gr.Group(visible=False) as grader_config_group:
+                gr.Markdown("### 奖赏计算逻辑配置")
+                add_grader_button = gr.Button("增加奖赏计算逻辑", variant="secondary")
+                
+                # 存储评分器配置列表
+                grader_configs = gr.State([])
+                
+                # 动态生成的评分器配置行容器
+                grader_rows_container = gr.Column()
+                
+                # 评分器配置显示表格
+                grader_display = gr.DataFrame(
+                    headers=["评分器", "解析字段", "答案字段"],
+                    label="已配置的评分器",
+                    interactive=False,
+                    visible=True,
+                    wrap=True,
+                    max_height=300,
+                    elem_id="grader_display_table"
+                )
+                
+                # 添加一个隐藏的触发器，用于强制刷新表格
+                grader_refresh_trigger = gr.State(0)
+                
+                with gr.Row(equal_height=True):
+                    grader_edit_button = gr.Button("✏️ 编辑", visible=False, size="sm", scale=1)
+                    grader_delete_button = gr.Button("🗑️ 删除", visible=False, size="sm", variant="stop", scale=1)
+                selected_grader_row = gr.State(None)  # 存储选中的评分器行索引
+                
+                # 编辑评分器的临时输入框
+                with gr.Group(visible=False) as grader_edit_group:
+                    gr.Markdown("#### 编辑评分器配置")
+                    with gr.Row():
+                        edit_grader_type = gr.Dropdown(
+                            choices=list(GraderRegistry.list_graders().keys()),
+                            label="评分器",
+                            interactive=True
+                        )
+                        edit_parse_field = gr.Textbox(
+                            label="解析字段",
+                            placeholder="例如：answer"
+                        )
+                        edit_answer_field = gr.Textbox(
+                            label="答案字段",
+                            placeholder="例如：correct_answer"
+                        )
+                    with gr.Row():
+                        save_grader_button = gr.Button("保存", variant="primary")
+                        cancel_grader_button = gr.Button("取消", variant="secondary")
+                
+                grader_edit_mode = gr.State({
+                    "active": False,
+                    "index": None
+                })
         
         # 已添加的要求列表
         requirements_list = gr.State([])
@@ -179,14 +245,15 @@ def create_requirements_ui():
             label="已添加的要求",
             interactive=False,
             visible=True,
-            wrap=True
+            wrap=True,
+            max_height=300
         )
         with gr.Row(equal_height=True):
             edit_button = gr.Button("✏️ 编辑", visible=False, size="sm", scale=1)
             delete_button = gr.Button("🗑️ 删除", visible=False, size="sm", variant="stop", scale=1)
         selected_row = gr.State(None)  # 存储选中的行索引
         
-        def update_requirement_groups(req_type: Optional[str], current_reqs: List[Dict], edit_state: Dict) -> Dict:
+        def update_requirement_groups(req_type: Optional[str], current_reqs: List[Dict], edit_state: Dict, rule_type: str) -> Dict:
             """更新要求配置组的可见性"""
             # 如果是编辑模式，不检查唯一性
             if not edit_state["active"]:
@@ -204,14 +271,83 @@ def create_requirements_ui():
                         count_group: gr.update(visible=False),
                         length_group: gr.update(visible=False),
                         format_group: gr.update(visible=False),
-                        requirement_type: gr.update(value=None)
+                        grader_config_group: gr.update(visible=False),
+                        add_count: gr.update(visible=False),
+                        add_length: gr.update(visible=False),
+                        add_format: gr.update(visible=False),
+                        requirement_type: gr.update(value=None),
+                        # 保持字段不变
+                        format_type: gr.update(),
+                        format_example: gr.update(),
+                        format_mode: gr.update(),
+                        format_coefficient: gr.update(),
+                        count_min: gr.update(),
+                        count_max: gr.update(),
+                        length_min: gr.update(),
+                        length_max: gr.update(),
+                        length_mode: gr.update(),
+                        length_coefficient: gr.update(),
+                        grader_configs: [],
+                        grader_display: gr.update(value=[])
                     }
             
-            return {
+            # 判断是否显示评分器配置组（只在结果标签的格式要求时显示）
+            is_result_label = rule_type == "结果标签"
+            is_format_requirement = req_type == "内容格式"
+            show_grader_config = is_result_label and is_format_requirement
+            
+            # 构建基本的更新字典
+            updates = {
                 count_group: gr.update(visible=req_type == "数量限制"),
                 length_group: gr.update(visible=req_type == "内容长度"),
-                format_group: gr.update(visible=req_type == "内容格式")
+                format_group: gr.update(visible=req_type == "内容格式"),
+                grader_config_group: gr.update(visible=show_grader_config),
+                add_count: gr.update(visible=req_type == "数量限制"),
+                add_length: gr.update(visible=req_type == "内容长度"),
+                add_format: gr.update(visible=req_type == "内容格式"),
+                # 默认保持字段不变
+                format_type: gr.update(),
+                format_example: gr.update(),
+                format_mode: gr.update(),
+                format_coefficient: gr.update(),
+                count_min: gr.update(),
+                count_max: gr.update(),
+                length_min: gr.update(),
+                length_max: gr.update(),
+                length_mode: gr.update(),
+                length_coefficient: gr.update(),
+                grader_configs: gr.update(),
+                grader_display: gr.update()
             }
+            
+            # 如果是新建内容格式要求（非编辑模式），重置所有格式字段
+            if req_type == "内容格式" and not edit_state["active"]:
+                updates.update({
+                    format_type: gr.update(value="json"),
+                    format_example: gr.update(value=""),
+                    format_mode: gr.update(value="均值"),
+                    format_coefficient: gr.update(value=1.0),
+                    grader_configs: [],
+                    grader_display: gr.update(value=[])
+                })
+            
+            # 如果是新建数量限制要求（非编辑模式），重置数量字段
+            if req_type == "数量限制" and not edit_state["active"]:
+                updates.update({
+                    count_min: gr.update(value=1),
+                    count_max: gr.update(value=1)
+                })
+            
+            # 如果是新建长度限制要求（非编辑模式），重置长度字段
+            if req_type == "内容长度" and not edit_state["active"]:
+                updates.update({
+                    length_min: gr.update(value=None),
+                    length_max: gr.update(value=512),
+                    length_mode: gr.update(value="均值"),
+                    length_coefficient: gr.update(value=1.0)
+                })
+            
+            return updates
         
         def add_or_update_requirement(req_type: str, edit_state: Dict, requirements: List[Dict], config_params: Dict):
             """添加或更新要求"""
@@ -242,13 +378,22 @@ def create_requirements_ui():
                     }
                 }
             else:  # format
+                # 获取当前规则类型来决定是否保存评分器配置
+                current_rule_type = config_params.get("current_rule_type", "")
+                grader_configs = None
+                
+                # 只有在结果标签的格式要求中才保存评分器配置
+                if current_rule_type == "结果标签":
+                    grader_configs = config_params.get("grader_configs", [])
+                
                 new_req = {
                     "type": internal_type,
                     "config": {
                         "type": config_params["format_type"],
                         "example": config_params["format_example"],
                         "mode": config_params["format_mode"],
-                        "coefficient": config_params["format_coefficient"]
+                        "coefficient": config_params["format_coefficient"],
+                        "grader_configs": grader_configs
                     }
                 }
             
@@ -286,6 +431,127 @@ def create_requirements_ui():
                 gr.update(choices=available_types, value=None)  # 更新要求类型的选项
             )
         
+        def add_grader_config(grader_configs: List[Dict]) -> Tuple[gr.Group, str, str, str]:
+            """添加新的评分器配置"""
+            return (
+                gr.update(visible=True),  # 显示编辑组
+                "",  # 清空评分器类型
+                "",  # 清空解析字段
+                ""   # 清空答案字段
+            )
+        
+        def save_grader_config(grader_type: str, parse_field: str, answer_field: str, 
+                             grader_configs: List[Dict], edit_mode: Dict) -> Tuple[List[Dict], List[List[str]], gr.Group, str, str, str, Dict]:
+            """保存评分器配置"""
+            if not grader_type or not parse_field or not answer_field:
+                gr.Warning("请填写完整的评分器配置信息")
+                return (
+                    grader_configs,
+                    [[config["grader"], config["parse_field"], config["answer_field"]] for config in grader_configs],
+                    gr.update(visible=True),
+                    grader_type,
+                    parse_field,
+                    answer_field,
+                    edit_mode
+                )
+            
+            new_config = {
+                "grader": grader_type,
+                "parse_field": parse_field,
+                "answer_field": answer_field
+            }
+            
+            # 如果是编辑模式，替换原有配置
+            if edit_mode["active"] and edit_mode["index"] is not None:
+                updated_configs = grader_configs.copy()
+                updated_configs[edit_mode["index"]] = new_config
+                edit_mode["active"] = False
+                edit_mode["index"] = None
+            else:
+                # 检查是否已存在相同的解析字段
+                if any(config["parse_field"] == parse_field for config in grader_configs):
+                    gr.Warning(f"解析字段 '{parse_field}' 已经配置过了")
+                    return (
+                        grader_configs,
+                        [[config["grader"], config["parse_field"], config["answer_field"]] for config in grader_configs],
+                        gr.update(visible=True),
+                        grader_type,
+                        parse_field,
+                        answer_field,
+                        edit_mode
+                    )
+                updated_configs = grader_configs + [new_config]
+            
+            display_data = [[config["grader"], config["parse_field"], config["answer_field"]] for config in updated_configs]
+            
+            return (
+                updated_configs,
+                display_data,
+                gr.update(visible=False),  # 隐藏编辑组
+                "",  # 清空评分器类型
+                "",  # 清空解析字段
+                "",  # 清空答案字段
+                edit_mode
+            )
+        
+        def cancel_grader_config(edit_mode: Dict) -> Tuple[gr.Group, str, str, str, Dict]:
+            """取消评分器配置编辑"""
+            edit_mode["active"] = False
+            edit_mode["index"] = None
+            return (
+                gr.update(visible=False),  # 隐藏编辑组
+                "",  # 清空评分器类型
+                "",  # 清空解析字段
+                "",  # 清空答案字段
+                edit_mode
+            )
+        
+        def select_grader_config(evt: gr.SelectData, grader_configs: List[Dict]) -> Dict:
+            """选择评分器配置进行编辑或删除"""
+            row_index = evt.index[0]
+            return {
+                grader_edit_button: gr.update(visible=True),
+                grader_delete_button: gr.update(visible=True),
+                selected_grader_row: row_index
+            }
+        
+        def delete_grader_config(row_index: int, grader_configs: List[Dict]) -> Tuple[List[Dict], List[List[str]], gr.Button, gr.Button]:
+            """删除选中的评分器配置"""
+            if row_index is None:
+                return (
+                    grader_configs,
+                    [[config["grader"], config["parse_field"], config["answer_field"]] for config in grader_configs],
+                    gr.update(visible=False),
+                    gr.update(visible=False)
+                )
+            
+            updated_configs = grader_configs[:row_index] + grader_configs[row_index + 1:]
+            display_data = [[config["grader"], config["parse_field"], config["answer_field"]] for config in updated_configs]
+            
+            return (
+                updated_configs,
+                display_data,
+                gr.update(visible=False),
+                gr.update(visible=False)
+            )
+        
+        def edit_grader_config(row_index: int, grader_configs: List[Dict]) -> Dict:
+            """编辑选中的评分器配置"""
+            if row_index is None:
+                return {}
+            
+            config = grader_configs[row_index]
+            
+            return {
+                grader_edit_group: gr.update(visible=True),
+                edit_grader_type: gr.update(value=config["grader"]),
+                edit_parse_field: gr.update(value=config["parse_field"]),
+                edit_answer_field: gr.update(value=config["answer_field"]),
+                grader_edit_button: gr.update(visible=False),
+                grader_delete_button: gr.update(visible=False),
+                grader_edit_mode: {"active": True, "index": row_index}
+            }
+        
         def select_requirement(evt: gr.SelectData, requirements: List[Dict]) -> Dict:
             """选择要求进行编辑或删除"""
             row_index = evt.index[0]
@@ -318,7 +584,7 @@ def create_requirements_ui():
                 gr.update(visible=False)
             )
         
-        def edit_requirement(row_index: int, requirements: List[Dict]) -> Dict:
+        def edit_requirement(row_index: int, requirements: List[Dict], current_rule_type: str) -> Dict:
             """编辑选中的要求"""
             if row_index is None:
                 return {}
@@ -341,10 +607,16 @@ def create_requirements_ui():
                 value=current_type
             )
             
+            # 判断是否显示评分器配置组（只在结果标签的格式要求时显示）
+            is_result_label = current_rule_type == "结果标签"
+            is_format_requirement = req_type == "format"
+            show_grader_config = is_result_label and is_format_requirement
+            
             # 隐藏所有配置组
             updates[count_group] = gr.update(visible=False)
             updates[length_group] = gr.update(visible=False)
             updates[format_group] = gr.update(visible=False)
+            updates[grader_config_group] = gr.update(visible=show_grader_config)
             
             # 根据类型显示和更新对应的配置组
             if req_type == "count":
@@ -363,6 +635,22 @@ def create_requirements_ui():
                 updates[format_example] = gr.update(value=config["example"])
                 updates[format_mode] = gr.update(value=config["mode"])
                 updates[format_coefficient] = gr.update(value=config["coefficient"])
+                
+                # 恢复评分器配置（如果存在）
+                grader_configs_data = config.get("grader_configs", [])
+                updates[grader_configs] = grader_configs_data
+                if grader_configs_data:
+                    # 为显示准备数据
+                    grader_display_data = [
+                        [gc["grader"], gc["parse_field"], gc["answer_field"]] 
+                        for gc in grader_configs_data
+                    ]
+                    # 先清空再设置，强制触发渲染更新
+                    updates[grader_display] = grader_display_data
+                    updates[grader_refresh_trigger] = updates.get(grader_refresh_trigger, 0) + 1
+                else:
+                    updates[grader_display] = []
+                    updates[grader_refresh_trigger] = updates.get(grader_refresh_trigger, 0) + 1
             
             # 更新按钮状态和编辑模式
             updates[edit_button] = gr.update(visible=False)
@@ -374,31 +662,45 @@ def create_requirements_ui():
         # 绑定事件
         requirement_type.change(
             fn=update_requirement_groups,
-            inputs=[requirement_type, requirements_list, edit_mode],
+            inputs=[requirement_type, requirements_list, edit_mode, current_rule_type],
             outputs=[
                 count_group,
                 length_group,
                 format_group,
+                grader_config_group,
                 add_count,
                 add_length,
                 add_format,
-                requirement_type
+                requirement_type,
+                format_type,
+                format_example,
+                format_mode,
+                format_coefficient,
+                count_min,
+                count_max,
+                length_min,
+                length_max,
+                length_mode,
+                length_coefficient,
+                grader_configs,
+                grader_display
             ]
         )
         
         # 添加要求按钮的事件处理
-        def wrap_add_count(edit_state: Dict, requirements: List[Dict], count_min: int, count_max: int):
+        def wrap_add_count(edit_state: Dict, requirements: List[Dict], count_min: int, count_max: int, current_rule_type: str):
             return add_or_update_requirement(
                 "数量限制",
                 edit_state,
                 requirements,
                 {
                     "count_min": count_min,
-                    "count_max": count_max
+                    "count_max": count_max,
+                    "current_rule_type": current_rule_type
                 }
             )
         
-        def wrap_add_length(edit_state: Dict, requirements: List[Dict], length_min: Optional[int], length_max: int, length_mode: str, length_coefficient: float):
+        def wrap_add_length(edit_state: Dict, requirements: List[Dict], length_min: Optional[int], length_max: int, length_mode: str, length_coefficient: float, current_rule_type: str):
             return add_or_update_requirement(
                 "内容长度",
                 edit_state,
@@ -407,11 +709,12 @@ def create_requirements_ui():
                     "length_min": length_min,
                     "length_max": length_max,
                     "length_mode": length_mode,
-                    "length_coefficient": length_coefficient
+                    "length_coefficient": length_coefficient,
+                    "current_rule_type": current_rule_type
                 }
             )
         
-        def wrap_add_format(edit_state: Dict, requirements: List[Dict], format_type: str, format_example: str, format_mode: str, format_coefficient: float):
+        def wrap_add_format(edit_state: Dict, requirements: List[Dict], format_type: str, format_example: str, format_mode: str, format_coefficient: float, grader_configs: List[Dict], current_rule_type: str):
             return add_or_update_requirement(
                 "内容格式",
                 edit_state,
@@ -420,7 +723,9 @@ def create_requirements_ui():
                     "format_type": format_type,
                     "format_example": format_example,
                     "format_mode": format_mode,
-                    "format_coefficient": format_coefficient
+                    "format_coefficient": format_coefficient,
+                    "grader_configs": grader_configs,
+                    "current_rule_type": current_rule_type
                 }
             )
 
@@ -430,7 +735,8 @@ def create_requirements_ui():
                 edit_mode,
                 requirements_list,
                 count_min,
-                count_max
+                count_max,
+                current_rule_type
             ],
             outputs=[
                 requirements_list,
@@ -448,7 +754,8 @@ def create_requirements_ui():
                 length_min,
                 length_max,
                 length_mode,
-                length_coefficient
+                length_coefficient,
+                current_rule_type
             ],
             outputs=[
                 requirements_list,
@@ -466,7 +773,9 @@ def create_requirements_ui():
                 format_type,
                 format_example,
                 format_mode,
-                format_coefficient
+                format_coefficient,
+                grader_configs,
+                current_rule_type
             ],
             outputs=[
                 requirements_list,
@@ -510,12 +819,13 @@ def create_requirements_ui():
         
         edit_button.click(
             fn=edit_requirement,
-            inputs=[selected_row, requirements_list],
+            inputs=[selected_row, requirements_list, current_rule_type],
             outputs=[
                 requirement_type,
                 count_group,
                 length_group,
                 format_group,
+                grader_config_group,
                 count_min,
                 count_max,
                 length_min,
@@ -526,9 +836,61 @@ def create_requirements_ui():
                 format_example,
                 format_mode,
                 format_coefficient,
+                grader_configs,
+                grader_display,
+                grader_refresh_trigger,
                 edit_button,
                 delete_button,
                 edit_mode
+            ]
+        ).then(
+            fn=refresh_grader_display,
+            inputs=[grader_configs],
+            outputs=[grader_display]
+        )
+        
+        # 评分器配置相关事件绑定
+        add_grader_button.click(
+            fn=add_grader_config,
+            inputs=[grader_configs],
+            outputs=[grader_edit_group, edit_grader_type, edit_parse_field, edit_answer_field]
+        )
+        
+        save_grader_button.click(
+            fn=save_grader_config,
+            inputs=[edit_grader_type, edit_parse_field, edit_answer_field, grader_configs, grader_edit_mode],
+            outputs=[grader_configs, grader_display, grader_edit_group, edit_grader_type, edit_parse_field, edit_answer_field, grader_edit_mode]
+        )
+        
+        cancel_grader_button.click(
+            fn=cancel_grader_config,
+            inputs=[grader_edit_mode],
+            outputs=[grader_edit_group, edit_grader_type, edit_parse_field, edit_answer_field, grader_edit_mode]
+        )
+        
+        grader_display.select(
+            fn=select_grader_config,
+            inputs=[grader_configs],
+            outputs=[grader_edit_button, grader_delete_button, selected_grader_row]
+        )
+        
+        grader_delete_button.click(
+            fn=delete_grader_config,
+            inputs=[selected_grader_row, grader_configs],
+            outputs=[grader_configs, grader_display, grader_edit_button, grader_delete_button]
+        )
+        
+        grader_edit_button.click(
+            fn=edit_grader_config,
+            inputs=[selected_grader_row, grader_configs],
+            outputs=[
+                grader_edit_group,
+                edit_grader_type,
+                edit_parse_field,
+                edit_answer_field,
+                grader_edit_button,
+                grader_delete_button,
+                grader_edit_mode
             ]
         )
         
@@ -546,7 +908,10 @@ def create_requirements_ui():
         "update_visibility": update_visibility,
         "requirements_list": requirements_list,
         "requirements_display": requirements_display,
-        "requirement_type": requirement_type
+        "requirement_type": requirement_type,
+        "current_rule_type": current_rule_type,
+        "grader_configs": grader_configs,
+        "grader_config_group": grader_config_group
     }
 
 def create_rule_definition_tab():
@@ -560,23 +925,25 @@ def create_rule_definition_tab():
             gr.Markdown("⚠️ 警告：未找到任何已注册的评分器！")
             return {"grader_type": None}
         
+        # 添加"不使用评分器"选项
+        grader_choices = ["不使用评分器"] + list(graders.keys())
+        grader_descriptions = {"不使用评分器": "不使用评分器进行评分"} | graders
+        
         # 评分器选择和测试区域
         with gr.Row():
-            with gr.Column(scale=1):
+            with gr.Column(scale=2):
                 grader_type = gr.Dropdown(
-                    choices=list(graders.keys()),
+                    choices=grader_choices,
                     label="评分器类型",
                     interactive=True,
-                    value=list(graders.keys())[0] if graders else None
+                    value="不使用评分器"
                 )
                 grader_description = gr.Markdown(
-                    value=f"**评分器说明**：{graders[list(graders.keys())[0]]}" if graders else ""
+                    value=f"**评分器说明**：{grader_descriptions['不使用评分器']}"
                 )
                 
                 def update_description(grader_name):
-                    if grader_name in graders:
-                        return f"**评分器说明**：{graders[grader_name]}"
-                    return "⚠️ 未选择评分器"
+                    return f"**评分器说明**：{grader_descriptions[grader_name]}"
                 
                 grader_type.change(
                     fn=update_description,
@@ -598,8 +965,8 @@ def create_rule_definition_tab():
                     test_result = gr.Number(label="评分结果", value=0.0)
                 
                 def test_grader(grader_name: str, test_input: str, test_reference: str) -> float:
-                    if not grader_name:
-                        gr.Warning("请先选择一个评分器！")
+                    if not grader_name or grader_name == "不使用评分器":
+                        gr.Warning("未选择评分器！")
                         return 0.0
                     if not test_input or not test_reference:
                         gr.Warning("请输入测试内容和参考答案！")
@@ -647,16 +1014,6 @@ def create_rule_definition_tab():
                     interactive=False,
                     visible=False
                 )
-            
-            with gr.Column(scale=1):
-                # 评分器选择下拉菜单
-                validator_type = gr.Dropdown(
-                    choices=["无"] + list(GraderRegistry.list_graders().keys()),
-                    label="评分器",
-                    value="无",
-                    interactive=True,
-                    visible=False
-                )
         
         # 创建标签要求配置界面
         requirements_ui = create_requirements_ui()
@@ -667,7 +1024,7 @@ def create_rule_definition_tab():
         # 规则列表显示
         rules_list = gr.State([])  # 存储已添加的规则
         rules_display = gr.DataFrame(
-            headers=["规则类型", "标签名称", "评分器", "标签要求"],
+            headers=["规则类型", "标签名称", "标签要求"],
             label="已添加的规则",
             interactive=False,
             visible=True,
@@ -696,7 +1053,7 @@ def create_rule_definition_tab():
             if row_index is None:
                 return (
                     rules,
-                    [[r["type"], r["label"], r.get("grader", "无"), json.dumps(r["requirements"], ensure_ascii=False, indent=2)] for r in rules],
+                    [[r["type"], r["label"], json.dumps(r["requirements"], ensure_ascii=False, indent=2)] for r in rules],
                     gr.update(visible=False),
                     gr.update(visible=False),
                     gr.update(choices=get_available_rule_types(rules, None), value=None)
@@ -704,7 +1061,7 @@ def create_rule_definition_tab():
             
             updated_rules = rules[:row_index] + rules[row_index + 1:]
             display_data = [
-                [r["type"], r["label"], r.get("grader", "无"), json.dumps(r["requirements"], ensure_ascii=False, indent=2)]
+                [r["type"], r["label"], json.dumps(r["requirements"], ensure_ascii=False, indent=2)]
                 for r in updated_rules
             ]
             
@@ -716,23 +1073,25 @@ def create_rule_definition_tab():
                 gr.update(choices=get_available_rule_types(updated_rules, None), value=None)
             )
         
-        def update_ui_visibility(rule_type: str, rules: List[Dict], edit_state: Dict, current_requirements: List[Dict]) -> Dict:
+        def update_ui_visibility(rule_type: str, rules: List[Dict], edit_state: Dict) -> Dict:
             """更新界面元素的可见性"""
             if not rule_type:
                 return {
                     label_name: gr.update(visible=False),
-                    validator_type: gr.update(visible=False),
                     add_button: gr.update(visible=False),
                     requirements_ui["group"]: gr.update(visible=False),
                     requirements_ui["requirements_list"]: [],
                     requirements_ui["requirements_display"]: [],
-                    requirements_ui["requirement_type"]: gr.update(choices=list(REQUIREMENT_TYPE_MAP.values()), value=None)
+                    requirements_ui["requirement_type"]: gr.update(choices=list(REQUIREMENT_TYPE_MAP.values()), value=None),
+                    requirements_ui["current_rule_type"]: "",
+                    requirements_ui["grader_configs"]: [],
+                    requirements_ui["grader_config_group"]: gr.update(visible=False)
                 }
             
             is_custom = rule_type == "自定义标签"
             label_value = "" if is_custom else RULE_TYPE_MAP[rule_type]
             
-            # 如果是编辑模式，从当前编辑的规则中获取要求列表和验证器
+            # 如果是编辑模式，从当前编辑的规则中获取要求列表
             if edit_state["active"] and edit_state["index"] is not None and edit_state["index"] < len(rules):
                 current_rule = rules[edit_state["index"]]
                 requirements = current_rule.get("requirements", [])
@@ -740,13 +1099,10 @@ def create_rule_definition_tab():
                 # 获取可用的要求类型（排除已添加的类型）
                 used_types = {REQUIREMENT_TYPE_MAP[r["type"]] for r in requirements}
                 available_types = [t for t in REQUIREMENT_TYPE_MAP.values() if t not in used_types]
-                # 获取当前验证器
-                current_validator = next((k for k, v in GraderRegistry.list_graders().items() if v == current_rule.get("grader")), "无")
             else:
                 requirements = []
                 requirements_display = []
                 available_types = list(REQUIREMENT_TYPE_MAP.values())
-                current_validator = "无"
                 # 重置编辑状态
                 edit_state["active"] = False
                 edit_state["index"] = None
@@ -758,15 +1114,14 @@ def create_rule_definition_tab():
                     value=label_value,
                     label="自定义标签名称" if is_custom else "标签名称"
                 ),
-                validator_type: gr.update(
-                    visible=True,
-                    value=current_validator
-                ),
                 add_button: gr.update(visible=True),
                 requirements_ui["group"]: gr.update(visible=True),
                 requirements_ui["requirements_list"]: requirements,
                 requirements_ui["requirements_display"]: requirements_display,
-                requirements_ui["requirement_type"]: gr.update(choices=available_types, value=None)
+                requirements_ui["requirement_type"]: gr.update(choices=available_types, value=None),
+                requirements_ui["current_rule_type"]: rule_type,
+                requirements_ui["grader_configs"]: [],
+                requirements_ui["grader_config_group"]: gr.update(visible=False)
             }
 
         def edit_rule(row_index: int, rules: List[Dict]) -> Dict:
@@ -795,11 +1150,8 @@ def create_rule_definition_tab():
             used_types = {REQUIREMENT_TYPE_MAP[r["type"]] for r in current_requirements}
             available_requirement_types = [t for t in REQUIREMENT_TYPE_MAP.values() if t not in used_types]
             
-            # 获取当前验证器
-            current_validator = next((k for k, v in GraderRegistry.list_graders().items() if v == rule.get("grader")), "无")
-            
             # 更新界面状态
-            updates = {
+            return {
                 rule_type: gr.update(
                     choices=available_types,
                     value=current_type
@@ -808,10 +1160,6 @@ def create_rule_definition_tab():
                     visible=True,
                     interactive=rule["type"] == "自定义标签",
                     value=rule["label"]
-                ),
-                validator_type: gr.update(
-                    visible=True,
-                    value=current_validator
                 ),
                 add_button: gr.update(visible=True),
                 rule_edit_button: gr.update(visible=False),
@@ -823,23 +1171,26 @@ def create_rule_definition_tab():
                     value=None
                 ),
                 requirements_ui["group"]: gr.update(visible=True),
+                requirements_ui["current_rule_type"]: current_type,
+                requirements_ui["grader_configs"]: [],
+                requirements_ui["grader_config_group"]: gr.update(visible=False),
                 rule_edit_mode: {"active": True, "index": row_index}
             }
-            
-            return updates
 
         # 规则类型改变时更新界面
         rule_type.change(
             fn=update_ui_visibility,
-            inputs=[rule_type, rules_list, rule_edit_mode, requirements_ui["requirements_list"]],
+            inputs=[rule_type, rules_list, rule_edit_mode],
             outputs=[
                 label_name,
-                validator_type,
                 add_button,
                 requirements_ui["group"],
                 requirements_ui["requirements_list"],
                 requirements_ui["requirements_display"],
-                requirements_ui["requirement_type"]
+                requirements_ui["requirement_type"],
+                requirements_ui["current_rule_type"],
+                requirements_ui["grader_configs"],
+                requirements_ui["grader_config_group"]
             ]
         )
 
@@ -869,22 +1220,24 @@ def create_rule_definition_tab():
                 requirements_ui["requirements_display"],
                 requirements_ui["requirement_type"],
                 requirements_ui["group"],
+                requirements_ui["current_rule_type"],
+                requirements_ui["grader_configs"],
+                requirements_ui["grader_config_group"],
                 rule_edit_mode
             ]
         )
 
         # 修改原有的添加规则函数，支持编辑模式
-        def add_or_update_rule(rule_type: str, label_value: str, validator_value: str, requirements: List[Dict], rules: List[Dict], edit_state: Dict) -> tuple:
+        def add_or_update_rule(rule_type: str, label_value: str, requirements: List[Dict], rules: List[Dict], edit_state: Dict) -> tuple:
             """添加或更新规则"""
             if not rule_type:
                 return (
-                    rules,                                          # rules_list
-                    rules_to_rows(rules),                          # rules_display
-                    None,                                          # rule_type
-                    "",                                            # label_name
-                    "无",                                          # validator_type
-                    gr.update(visible=False),                      # add_button
-                    gr.update(choices=get_available_rule_types(rules), value=None)  # rule_type更新
+                    rules,  # rules_list
+                    [[r["type"], r["label"], json.dumps(r["requirements"], ensure_ascii=False, indent=2)] for r in rules],  # rules_display
+                    None,   # rule_type
+                    "",     # label_name
+                    gr.update(visible=False),  # add_button
+                    gr.update(choices=get_available_rule_types(rules), value=None)  # rule_type update
                 )
             
             # 验证标签名称
@@ -893,36 +1246,34 @@ def create_rule_definition_tab():
                     gr.Warning("请输入自定义标签名称")
                     return (
                         rules,
-                        rules_to_rows(rules),
+                        [[r["type"], r["label"], json.dumps(r["requirements"], ensure_ascii=False, indent=2)] for r in rules],
                         rule_type,
                         label_value,
-                        validator_value,
-                        gr.update(visible=True),
-                        gr.update(choices=get_available_rule_types(rules), value=rule_type)
-                    )
-                if not label_value.isidentifier():
-                    gr.Warning("标签名称只能包含字母、数字和下划线，且不能以数字开头")
-                    return (
-                        rules,
-                        rules_to_rows(rules),
-                        rule_type,
-                        label_value,
-                        validator_value,
                         gr.update(visible=True),
                         gr.update(choices=get_available_rule_types(rules), value=rule_type)
                     )
             
-            # 如果是编辑模式，使用原有的要求列表
-            if edit_state["active"] and edit_state["index"] is not None:
-                current_requirements = rules[edit_state["index"]].get("requirements", [])
-            else:
-                current_requirements = requirements
+            # 使用传入的要求列表
+            current_requirements = requirements
+            
+            # 对于非结果标签的规则，清理格式要求中的grader字段
+            if rule_type != "结果标签":
+                cleaned_requirements = []
+                for req in current_requirements:
+                    if req["type"] == "format":
+                        # 创建副本并移除grader字段
+                        cleaned_req = req.copy()
+                        cleaned_req["config"] = req["config"].copy()
+                        cleaned_req["config"]["grader"] = None
+                        cleaned_requirements.append(cleaned_req)
+                    else:
+                        cleaned_requirements.append(req)
+                current_requirements = cleaned_requirements
             
             # 创建新规则
             new_rule = {
                 "type": rule_type,
-                "label": RULE_TYPE_MAP.get(rule_type, label_value),
-                "grader": None if validator_value == "无" else validator_value,  # 如果选择"无"则设为None
+                "label": label_value,
                 "requirements": current_requirements
             }
             
@@ -934,10 +1285,9 @@ def create_rule_definition_tab():
                     gr.Warning(f"标签名称 '{label_value}' 已经存在")
                     return (
                         rules,
-                        rules_to_rows(rules),
+                        [[r["type"], r["label"], json.dumps(r["requirements"], ensure_ascii=False, indent=2)] for r in rules],
                         rule_type,
                         label_value,
-                        validator_value,
                         gr.update(visible=True),
                         gr.update(choices=get_available_rule_types(rules), value=rule_type)
                     )
@@ -954,24 +1304,27 @@ def create_rule_definition_tab():
                     gr.Warning(f"标签名称 '{label_value}' 已经存在")
                     return (
                         rules,
-                        rules_to_rows(rules),
+                        [[r["type"], r["label"], json.dumps(r["requirements"], ensure_ascii=False, indent=2)] for r in rules],
                         rule_type,
                         label_value,
-                        validator_value,
                         gr.update(visible=True),
                         gr.update(choices=get_available_rule_types(rules), value=rule_type)
                     )
                 updated_rules = rules + [new_rule]
             
-            # 清空输入并隐藏控件，更新规则类型选项
+            # 转换为DataFrame显示格式
+            display_data = [
+                [r["type"], r["label"], json.dumps(r["requirements"], ensure_ascii=False, indent=2)]
+                for r in updated_rules
+            ]
+            
             return (
-                updated_rules,                                     # rules_list
-                rules_to_rows(updated_rules),                     # rules_display
-                None,                                             # rule_type
-                "",                                               # label_name
-                "无",                                             # validator_type
-                gr.update(visible=False),                         # add_button
-                gr.update(choices=get_available_rule_types(updated_rules), value=None)  # rule_type更新
+                updated_rules,  # rules_list
+                display_data,   # rules_display
+                None,          # rule_type
+                "",           # label_name
+                gr.update(visible=False),  # add_button
+                gr.update(choices=get_available_rule_types(updated_rules), value=None)  # rule_type update
             )
 
         # 更新添加规则按钮的事件处理
@@ -980,19 +1333,17 @@ def create_rule_definition_tab():
             inputs=[
                 rule_type,
                 label_name,
-                validator_type,
                 requirements_ui["requirements_list"],
                 rules_list,
                 rule_edit_mode
             ],
             outputs=[
-                rules_list,             # 规则列表状态
-                rules_display,          # 规则显示表格
-                rule_type,              # 规则类型下拉框
-                label_name,             # 标签名称输入框
-                validator_type,         # 评分器下拉框
-                add_button,             # 添加按钮
-                rule_type              # 规则类型选项更新
+                rules_list,
+                rules_display,
+                rule_type,
+                label_name,
+                add_button,
+                rule_type  # 添加rule_type到输出以更新选项
             ]
         )
         
@@ -1002,15 +1353,31 @@ def create_rule_definition_tab():
         }
 
 
-def generate_reward_json(rule_data: Dict[str, Any]) -> Dict[str, Any]:
+def create_model_evaluation_tab():
+    """模型评判子标签页"""
+    with gr.Blocks() as tab:
+        gr.Markdown("## 模型评判")
+        # 待补充具体内容
+        return {}
+
+
+def create_validation_tools_tab():
+    """验证工具子标签页"""
+    with gr.Blocks() as tab:
+        gr.Markdown("## 验证工具")
+        # 待补充具体内容
+        return {}
+
+
+def generate_reward_json(rules_data: List[Dict]) -> Dict[str, Any]:
     """生成奖赏配置JSON"""
     reward_config = {
-        "grader": {
-            "type": rule_data["grader_type"]
-        },
-        "rules": rule_data["rules"]
+        "rules": rules_data,
+        "version": "1.0",
+        "description": "RL-Factory奖赏定义配置"
     }
     return reward_config
+
 
 def generate_reward_python(reward_config: Dict[str, Any]) -> str:
     """根据配置生成Python奖赏函数"""
@@ -1037,21 +1404,8 @@ class RewardFunction:
 '''
     return template
 
-def rules_to_rows(rules: List[Dict]) -> List[List[str]]:
-    """将规则列表转换为显示格式
-    
-    Args:
-        rules: 规则列表
-        
-    Returns:
-        List[List[str]]: 显示格式的规则列表，每行包含[规则类型, 标签名称, 评分器, 标签要求]
-    """
-    return [
-        [
-            r["type"],
-            r["label"],
-            r.get("grader", "无"),
-            json.dumps(r.get("requirements", []), ensure_ascii=False, indent=2)
-        ]
-        for r in rules
-    ]
+def refresh_grader_display(grader_configs: List[Dict]) -> List[List[str]]:
+    """专门用于刷新评分器显示表格的函数"""
+    if not grader_configs:
+        return []
+    return [[config["grader"], config["parse_field"], config["answer_field"]] for config in grader_configs]

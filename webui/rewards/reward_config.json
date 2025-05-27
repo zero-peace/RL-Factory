@@ -1,0 +1,28 @@
+{
+  "rules": [
+    {
+      "type": "结果标签",
+      "label": "answer",
+      "requirements": [
+        {
+          "type": "format",
+          "config": {
+            "type": "json",
+            "example": "aaa",
+            "mode": "均值",
+            "coefficient": 1,
+            "grader_configs": [
+              {
+                "grader": "qwen_math",
+                "parse_field": "aaa",
+                "answer_field": "aaaa"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "version": "1.0",
+  "description": "RL-Factory奖赏定义配置"
+}
