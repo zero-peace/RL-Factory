@@ -138,19 +138,33 @@ def refresh_project_list():
     project_choices = [p['name'] for p in projects]
     return gr.update(choices=project_choices, value=project_choices[0] if project_choices else None)
 
-def get_project_info(selected_project):
-    """获取选中项目的详细信息"""
+def get_project_info(selected_project, is_global=False):
+    """获取选中项目的详细信息
+    
+    Args:
+        selected_project: 选中的项目名称
+        is_global: 是否为全局项目信息显示（True返回项目名称、路径、描述，False返回项目详情markdown）
+    
+    Returns:
+        如果is_global为False，返回项目详情markdown文本
+        如果is_global为True，返回(项目名称, 项目路径, 项目描述)元组
+    """
     if not selected_project:
-        return "请选择一个项目"
+        if not is_global:
+            return "请选择一个项目"
+        return "**项目名称**: 未选择", "**项目路径**: -", "**项目描述**: -"
     
     # 项目名称就是选择的值
     project_name = selected_project
     
+    # 获取项目路径
     projects_dir = get_projects_dir()
     project_path = projects_dir / project_name
     
     if not project_path.exists():
-        return f"项目 '{project_name}' 不存在"
+        if not is_global:
+            return f"项目 '{project_name}' 不存在"
+        return f"**项目名称**: {project_name}", f"**项目路径**: 项目不存在", "**项目描述**: -"
     
     config_file = project_path / "project_config.json"
     if config_file.exists():
@@ -158,7 +172,9 @@ def get_project_info(selected_project):
             with open(config_file, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             
-            info = f"""## 项目信息
+            if not is_global:
+                # 返回项目详情markdown
+                info = f"""## 项目信息
 
 **项目名称**: {config.get('name', project_name)}
 **项目描述**: {config.get('description', '暂无描述')}
@@ -167,20 +183,38 @@ def get_project_info(selected_project):
 
 ### 目录结构
 """
-            
-            # 列出项目目录内容
-            for item in sorted(project_path.iterdir()):
-                if item.is_dir():
-                    info += f"- 📁 `{item.name}/`\n"
-                else:
-                    info += f"- 📄 `{item.name}`\n"
-            
-            return info
+                # 列出项目目录内容
+                for item in sorted(project_path.iterdir()):
+                    if item.is_dir():
+                        info += f"- 📁 `{item.name}/`\n"
+                    else:
+                        info += f"- 📄 `{item.name}`\n"
+                
+                return info
+            else:
+                # 返回项目选择信息
+                return (
+                    f"**项目名称**: {config.get('name', project_name)}",
+                    f"**项目路径**: {project_path}",
+                    f"**项目描述**: {config.get('description', '暂无描述')}"
+                )
             
         except Exception as e:
-            return f"读取项目配置失败: {str(e)}"
+            if not is_global:
+                return f"读取项目配置失败: {str(e)}"
+            return (
+                f"**项目名称**: {project_name}",
+                f"**项目路径**: {project_path}",
+                f"**项目描述**: 配置文件读取失败"
+            )
     else:
-        return f"项目 '{project_name}' 缺少配置文件"
+        if not is_global:
+            return f"项目 '{project_name}' 缺少配置文件"
+        return (
+            f"**项目名称**: {project_name}",
+            f"**项目路径**: {project_path}",
+            "**项目描述**: 无配置文件"
+        )
 
 def create_project_management_tab():
     """项目管理标签页
@@ -259,4 +293,4 @@ def create_project_management_tab():
             outputs=[project_info_output]
         )
     
-    return tab 
+    return tab, get_project_info, project_dropdown 
