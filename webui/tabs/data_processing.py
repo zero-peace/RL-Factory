@@ -11,11 +11,13 @@ from typing import List, Dict, Any
 from pathlib import Path
 from datetime import datetime
 
-DEFAULT_PREFIX = """Answer the given question. \
+DEFAULT_SYSTEM_PREFIX = """You are a helpful AI assistant. \
 You must conduct reasoning inside <think> and </think> first every time you get new information. \
 After reasoning, if you find you lack some knowledge, you can call a search engine by <search> query </search> and it will return the top searched results between <information> and </information>. \
 You can search as many times as your want. \
-If you find no further external knowledge needed, you can directly provide the answer inside <answer> and </answer>, without detailed illustrations. For example, <answer> Beijing </answer>. Question: {question}\n"""
+If you find no further external knowledge needed, you can directly provide the answer inside <answer> and </answer>, without detailed illustrations. For example, <answer> Beijing </answer>."""
+
+DEFAULT_USER_PREFIX = """Question: {question}\n"""
 
 def get_project_path(current_project_path):
     """从显示文本中提取项目路径，并返回数据目录路径
@@ -42,14 +44,20 @@ def get_project_path(current_project_path):
     #print(f"Debug - Data path: {data_path}")  # 添加打印调试
     
     return data_path
-def make_prefix(question: str, template_type: str, custom_prefix: str = None) -> str:
+
+def make_prefix(question: str, template_type: str, custom_system_prefix: str = None, custom_user_prefix: str = None) -> str:
     if template_type == 'base':
-        prefix = custom_prefix if custom_prefix else DEFAULT_PREFIX
-        return prefix.format(question=question)
+        system_prefix = custom_system_prefix if custom_system_prefix else DEFAULT_SYSTEM_PREFIX
+        user_prefix = custom_user_prefix if custom_user_prefix else DEFAULT_USER_PREFIX
+        return f"{system_prefix}\n\n{user_prefix.format(question=question)}"
+    elif template_type == 'multiturn':
+        system_prefix = custom_system_prefix if custom_system_prefix else DEFAULT_SYSTEM_PREFIX
+        user_prefix = custom_user_prefix if custom_user_prefix else DEFAULT_USER_PREFIX
+        return f"{system_prefix}\n\n{user_prefix.format(question=question)}"
     else:
         raise NotImplementedError(f"Template type {template_type} not implemented")
 
-def process_data(raw_data: str, template_type: str, split: str, custom_prefix: str = None) -> tuple[List[Dict[str, Any]], str]:
+def process_data(raw_data: str, template_type: str, split: str, custom_system_prefix: str = None, custom_user_prefix: str = None) -> tuple[List[Dict[str, Any]], str]:
     # Parse raw data (assuming it's in a format where each line is a JSON object)
     data_list = []
     status_messages = []
@@ -66,7 +74,7 @@ def process_data(raw_data: str, template_type: str, split: str, custom_prefix: s
             if question[-1] != '?':
                 question += '?'
             
-            prefix = make_prefix(question, template_type, custom_prefix)
+            prefix = make_prefix(question, template_type, custom_system_prefix, custom_user_prefix)
             
             data_item = {
                 "data_source": "nq",
@@ -112,54 +120,96 @@ def process_data(raw_data: str, template_type: str, split: str, custom_prefix: s
     
     return data_list, "\n".join(status_summary)
 
-def save_to_parquet(data_list: List[Dict[str, Any]], output_path: str, current_project_path: gr.Markdown, split: str = "train") -> str:
-    """保存数据到parquet文件
+def save_to_parquet(data_list: List[Dict[str, Any]], output_path: str, current_project_path: gr.Markdown, split: str = "train", raw_data_path: str = None) -> str:
+    """保存数据到parquet文件，并生成元数据JSON文件
     
     Args:
         data_list: 要保存的数据列表
         output_path: 用户指定的输出路径（可选）
         current_project_path: 当前项目路径组件
         split: 数据集分割类型（train/test）
+        raw_data_path: 原始数据文件路径
     
     Returns:
         str: 保存状态信息
     """
     try:
+        # 生成时间戳
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
         if output_path:
             print(output_path)
             df = pd.DataFrame(data_list)
             df.to_parquet(output_path)
+            parquet_path = output_path
         else:
             # 获取项目数据目录
             project_data_path = get_project_path(current_project_path)
             if not project_data_path:
                 return "错误：未选择项目"
             
-            # 创建data目录
-            data_dir = os.path.join(project_data_path, "data")
-            os.makedirs(data_dir, exist_ok=True)
+            # 创建processed目录
+            processed_dir = os.path.join(project_data_path, "processed")
+            os.makedirs(processed_dir, exist_ok=True)
             
             # 生成文件名：split_YYYYMMDD_HHMMSS.parquet
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{split}_{timestamp}.parquet"
-            output_path = os.path.join(data_dir, filename)
+            parquet_path = os.path.join(processed_dir, filename)
             
-            print(f"保存到: {output_path}")
+            print(f"保存到: {parquet_path}")
             df = pd.DataFrame(data_list)
-            df.to_parquet(output_path)
+            df.to_parquet(parquet_path)
+
+        # 获取原始数据的字段信息
+        raw_fields = []
+        if raw_data_path and os.path.exists(raw_data_path):
+            raw_fields = get_available_keys(raw_data_path)
+
+        # 生成元数据JSON文件
+        metadata = {
+            "raw_data_path": raw_data_path,
+            "processed_data_path": parquet_path,
+            "data_description": {
+                "total_samples": len(data_list),
+                "split": split,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "raw_data_fields": raw_fields,
+                "processed_data_fields": {
+                    "prompt": "用户输入的问题",
+                    "ability": "任务类型",
+                    "reward_model": {
+                        "style": "奖励模型类型",
+                        "ground_truth": "标准答案"
+                    },
+                    "extra_info": "额外信息，包含split和index"
+                }
+            }
+        }
+
+        # 保存元数据JSON文件到data目录
+        project_data_path = get_project_path(current_project_path)
         
-        return f"成功保存 {len(data_list)} 条记录到 {output_path}"
+        # 从parquet路径中提取文件名（不包含processed目录）
+        filename = os.path.basename(parquet_path)
+        base_name = os.path.splitext(filename)[0]  # 移除.parquet后缀
+        metadata_path = os.path.join(project_data_path, f"{base_name}_metadata.json")
+        
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, ensure_ascii=False, indent=2)
+        
+        return f"成功保存 {len(data_list)} 条记录到 {parquet_path}\n元数据文件已保存到: {metadata_path}"
     except Exception as e:
         return f"保存文件时出错: {str(e)}"
 
-def process_data_from_file(file_path: str, template_type: str, split: str, custom_prefix: str = None, ground_truth_keys: List[str] = None, question_key: str = 'question') -> tuple[List[Dict[str, Any]], str]:
+def process_data_from_file(file_path: str, template_type: str, split: str, custom_system_prefix: str = None, custom_user_prefix: str = None, ground_truth_keys: List[str] = None, question_key: str = 'question') -> tuple[List[Dict[str, Any]], str]:
     """从文件流式处理数据
     
     Args:
         file_path: 输入文件路径
         template_type: 模板类型
         split: 数据集分割
-        custom_prefix: 自定义前缀
+        custom_system_prefix: 自定义系统前缀
+        custom_user_prefix: 自定义用户前缀
         ground_truth_keys: 作为ground_truth的字段列表
         question_key: 作为question的字段名
     
@@ -186,7 +236,7 @@ def process_data_from_file(file_path: str, template_type: str, split: str, custo
                     if question[-1] != '?':
                         question += '?'
                     
-                    prefix = make_prefix(question, template_type, custom_prefix)
+                    prefix = make_prefix(question, template_type, custom_system_prefix, custom_user_prefix)
                     
                     # 获取ground_truth值
                     ground_truth_values = []
@@ -262,11 +312,24 @@ def read_parquet_file(file_path: str) -> pd.DataFrame:
         pd.DataFrame: 读取的数据
     """
     try:
-        # 使用pyarrow引擎读取，支持流式读取大文件
-        df = pd.read_parquet(file_path, engine='pyarrow')
+        if not file_path:
+            return pd.DataFrame({"Error": ["请输入文件路径"]})
+        if not os.path.exists(file_path):
+            return pd.DataFrame({"Error": [f"文件不存在: {file_path}"]})
+            
+        # 使用保守的参数读取parquet文件
+        df = pd.read_parquet(
+            file_path,
+            engine='pyarrow',
+            use_threads=False,
+            memory_map=True,
+            coerce_int96_timestamp_unit='ms'
+        )
+        
+        # 只返回前5行数据
         return df.head(5)
     except Exception as e:
-        return pd.DataFrame({"Error": [str(e)]})
+        return pd.DataFrame({"Error": [f"读取文件时出错: {str(e)}"]})
 
 def get_available_keys(file_path: str) -> List[str]:
     """从输入文件中获取可用的字段名
@@ -287,6 +350,74 @@ def get_available_keys(file_path: str) -> List[str]:
     except Exception as e:
         print(f"获取字段名时出错: {str(e)}")
     return []
+
+def get_dataset_metadata(project_path: str) -> List[Dict[str, Any]]:
+    """获取项目下所有数据集的元数据信息
+    
+    Args:
+        project_path: 项目路径
+    
+    Returns:
+        List[Dict[str, Any]]: 元数据信息列表
+    """
+    metadata_list = []
+    if not project_path or project_path == "**项目路径**: -":
+        return metadata_list
+        
+    # 获取项目数据目录
+    data_dir = os.path.join(project_path.replace("**项目路径**: ", ""), "data")
+    if not os.path.exists(data_dir):
+        return metadata_list
+        
+    # 遍历目录查找所有metadata文件
+    for file in os.listdir(data_dir):
+        if file.endswith("_metadata.json"):
+            try:
+                with open(os.path.join(data_dir, file), 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+                    metadata_list.append(metadata)
+            except Exception as e:
+                print(f"读取元数据文件 {file} 时出错: {str(e)}")
+                
+    return metadata_list
+
+def format_metadata_display(metadata: Dict[str, Any]) -> str:
+    """格式化元数据信息用于显示
+    
+    Args:
+        metadata: 元数据字典
+    
+    Returns:
+        str: 格式化后的显示文本
+    """
+    if not metadata:
+        return "未选择数据集"
+        
+    display = []
+    display.append("## 数据集信息")
+    display.append(f"- 原始数据路径: {metadata['raw_data_path']}")
+    display.append(f"- 处理后数据路径: {metadata['processed_data_path']}")
+    
+    desc = metadata['data_description']
+    display.append("\n## 数据描述")
+    display.append(f"- 样本数量: {desc['total_samples']}")
+    display.append(f"- 数据集类型: {desc['split']}")
+    display.append(f"- 处理时间: {desc['timestamp']}")
+    
+    display.append("\n## 原始数据字段")
+    for field in desc['raw_data_fields']:
+        display.append(f"- {field}")
+    
+    display.append("\n## 处理后数据字段")
+    for field, desc in desc['processed_data_fields'].items():
+        if isinstance(desc, dict):
+            display.append(f"- {field}:")
+            for subfield, subdesc in desc.items():
+                display.append(f"  - {subfield}: {subdesc}")
+        else:
+            display.append(f"- {field}: {desc}")
+            
+    return "\n".join(display)
 
 def create_data_processing_tab(current_project_path):
     """数据处理标签页
@@ -339,7 +470,7 @@ def create_data_processing_tab(current_project_path):
                             gr.Markdown("### 处理设置")
                             
                             template_type = gr.Dropdown(
-                                choices=["base"],
+                                choices=["base", "multiturn"],
                                 value="base",
                                 label="模板类型"
                             )
@@ -356,15 +487,26 @@ def create_data_processing_tab(current_project_path):
                                 interactive=True,
                                 visible=False
                             )
-                            use_custom_prefix = gr.Checkbox(
-                                label="使用自定义前缀",
+                            use_custom_system_prefix = gr.Checkbox(
+                                label="使用自定义系统前缀",
                                 value=False
                             )
-                            custom_prefix = gr.Textbox(
-                                label="自定义前缀模板",
-                                placeholder="在此输入自定义前缀模板。使用 {question} 作为问题的占位符。",
+                            use_custom_user_prefix = gr.Checkbox(
+                                label="使用自定义用户前缀",
+                                value=False
+                            )
+                            custom_system_prefix = gr.Textbox(
+                                label="自定义系统前缀模板",
+                                placeholder="在此输入自定义系统前缀模板。",
                                 lines=5,
-                                value=DEFAULT_PREFIX,
+                                value=DEFAULT_SYSTEM_PREFIX,
+                                visible=False
+                            )
+                            custom_user_prefix = gr.Textbox(
+                                label="自定义用户前缀模板",
+                                placeholder="在此输入自定义用户前缀模板。使用 {question} 作为问题的占位符。",
+                                lines=5,
+                                value=DEFAULT_USER_PREFIX,
                                 visible=False
                             )
                             split = gr.Dropdown(
@@ -425,7 +567,64 @@ def create_data_processing_tab(current_project_path):
                             )
             
             with gr.TabItem("数据集管理"):
-                gr.Markdown("### 数据集管理功能开发中...")
+                gr.Markdown("""
+                ## 数据集管理
+                在此标签页中，您可以：
+                - 查看所有已处理的数据集
+                - 查看数据集的详细信息
+                - 管理数据集
+                """)
+                
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        with gr.Group():
+                            gr.Markdown("### 数据集列表")
+                            refresh_btn = gr.Button("刷新数据集列表", variant="primary")
+                            dataset_dropdown = gr.Dropdown(
+                                label="选择数据集",
+                                choices=[],
+                                interactive=True
+                            )
+                    
+                    with gr.Column(scale=2):
+                        with gr.Group():
+                            gr.Markdown("### 数据集详情")
+                            metadata_display = gr.Markdown()
+                
+                def refresh_dataset_list(project_path):
+                    metadata_list = get_dataset_metadata(project_path)
+                    choices = []
+                    for metadata in metadata_list:
+                        # 从processed_data_path中提取文件名作为显示名称
+                        filename = os.path.basename(metadata['processed_data_path'])
+                        choices.append(filename)
+                    return gr.update(choices=choices, value=None)
+                
+                def display_metadata(project_path, selected_dataset):
+                    if not selected_dataset:
+                        return "请选择数据集"
+                    
+                    metadata_list = get_dataset_metadata(project_path)
+                    for metadata in metadata_list:
+                        if os.path.basename(metadata['processed_data_path']) == selected_dataset:
+                            return format_metadata_display(metadata)
+                    return "未找到选中的数据集信息"
+                
+                # 绑定事件处理
+                refresh_btn.click(
+                    fn=refresh_dataset_list,
+                    inputs=[current_project_path],
+                    outputs=[dataset_dropdown]
+                )
+                
+                dataset_dropdown.change(
+                    fn=display_metadata,
+                    inputs=[current_project_path, dataset_dropdown],
+                    outputs=[metadata_display]
+                )
+                
+                # 初始加载数据集列表
+                refresh_btn.click()
         
         def load_available_keys(file_path: str):
             if not file_path:
@@ -439,10 +638,14 @@ def create_data_processing_tab(current_project_path):
             
             return gr.update(choices=keys, visible=True), gr.update(choices=keys, visible=True), f"成功加载字段: {', '.join(keys)}"
         
-        def process_and_save_from_path(file_path: str, template_type: str, split: str, output_path: str, use_custom_prefix: bool, custom_prefix: str, current_project_path: gr.Markdown, selected_keys: List[str], question_key: str):
-            prefix = custom_prefix if use_custom_prefix else None
-            processed_data, status = process_data_from_file(file_path, template_type, split, prefix, selected_keys, question_key)
-            save_status = save_to_parquet(processed_data, output_path, current_project_path, split)
+        def process_and_save_from_path(file_path: str, template_type: str, split: str, output_path: str, 
+                                     use_custom_system_prefix: bool, use_custom_user_prefix: bool,
+                                     custom_system_prefix: str, custom_user_prefix: str,
+                                     current_project_path: gr.Markdown, selected_keys: List[str], question_key: str):
+            system_prefix = custom_system_prefix if use_custom_system_prefix else None
+            user_prefix = custom_user_prefix if use_custom_user_prefix else None
+            processed_data, status = process_data_from_file(file_path, template_type, split, system_prefix, user_prefix, selected_keys, question_key)
+            save_status = save_to_parquet(processed_data, output_path, current_project_path, split, raw_data_path=file_path)
             return f"{status}\n\n{save_status}"
         
         def preview_parquet_file(file_path: str):
@@ -466,7 +669,10 @@ def create_data_processing_tab(current_project_path):
         # Handle file processing
         process_btn.click(
             fn=process_and_save_from_path,
-            inputs=[file_path, template_type, split, output_path, use_custom_prefix, custom_prefix, current_project_path, available_keys, question_key],
+            inputs=[file_path, template_type, split, output_path, 
+                   use_custom_system_prefix, use_custom_user_prefix,
+                   custom_system_prefix, custom_user_prefix,
+                   current_project_path, available_keys, question_key],
             outputs=output
         )
         
@@ -478,10 +684,16 @@ def create_data_processing_tab(current_project_path):
         )
         
         # Handle custom prefix visibility
-        use_custom_prefix.change(
+        use_custom_system_prefix.change(
             fn=lambda x: gr.update(visible=x),
-            inputs=[use_custom_prefix],
-            outputs=[custom_prefix]
+            inputs=[use_custom_system_prefix],
+            outputs=[custom_system_prefix]
+        )
+        
+        use_custom_user_prefix.change(
+            fn=lambda x: gr.update(visible=x),
+            inputs=[use_custom_user_prefix],
+            outputs=[custom_user_prefix]
         )
     
     return tab 
