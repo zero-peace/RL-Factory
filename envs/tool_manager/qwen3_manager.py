@@ -279,7 +279,15 @@ class QwenManager(ToolManager):
         i = response.find('<tool_call>')
         # If no function call:
         if i < 0:
-            return response
+            j = response.find('</tool_call>')
+            if j < 0:
+                return response
+            else:
+                parsed_tools.append({
+                        "name": "<error>",
+                        "args": "# Extract the tool name failed"
+                    })
+                return parsed_tools
 
         # split tool-call to separate assistant msg
         tool_call_list = response.split('<tool_call>')
@@ -324,6 +332,16 @@ class QwenManager(ToolManager):
                         "name": "<empty>",
                         "args": "# Extract the tool name failed"
                     })
+        
+        if len(parsed_tools) == 0 :
+            # <tool_call> is last token
+            fn_name = '<empty>'
+            fn_args = """# Extract the tool name failed"""
+            parsed_tools.append(
+                {
+                    "name": fn_name,
+                    "args": fn_args,
+                })
 
         return parsed_tools
     
