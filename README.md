@@ -20,6 +20,19 @@ Current version natively supports one-click **DeepSearch** training and features
   <b>Now, everyone can easily and quickly train an Agent with Qwen3 (as base models) and MCP tools!</b>
 </div>
 
+## Release Log
+We’ll keep a fast release cycle to quickly deliver and polish the upcoming features.
++ **Version 0.1**
+  + **Environment decouple**: define your tool-use envinroment easily (tools setup and reward function definition)
+  + **Qwen3 Model support**: quickly train your agent using Qwen3 (much better than Qwen2.5 in tool-call)
+  + **Efficient training**: 2x faster than existing frameworks for rapid model iteration (mainly through async tool-use)
++ **Version 0.2** (within 2 weeks) We are looking forward to more people participating in the development and construction together, to create a great Agenetic Training community. Please feel free to contact us.
+  - [ ] **WebUI**: build a WebUI for data processing, tool & environment definition, training configuration, and project management [#2](https://github.com/Simple-Efficient/RL-Factory/issues/2)
+  - [ ] **More efficient training**: support the AsyncLLMEngine for more efficient rollout and User Simulation (for multi-turn user interaction training) [#4](https://github.com/Simple-Efficient/RL-Factory/issues/4)
+  - [ ] **More models**: test more models (such as Deepseek, Llama, etc.) and add corresponding support configurations [#5](https://github.com/Simple-Efficient/RL-Factory/issues/5)
+  - [x] **Process Reward**: use process reward to better guide the tool-call behavior of your model [#6](https://github.com/Simple-Efficient/RL-Factory/issues/6)
+  - [ ] **More applications**: help create more demos (such as [TravelPlanner](https://github.com/OSU-NLP-Group/TravelPlanner)) to adapt to more benchmarks
+
 ## Our Framework Design
 Our goal is to enable users to focus on reward logic and tool setup for fast agentic learning with minimal code, while hardcore developers could focus on improving training efficiency and model performance. 
 
@@ -39,20 +52,6 @@ For **future progression**, we will continue to prioritize **"easy"** and **"eff
 <div align="center">
   <img src="https://github.com/user-attachments/assets/883fd8c0-afa9-4ed2-95be-333a79ce7e36" alt="Description" style="width:750px; height:auto;"/>
 </div>
-
-
-## Release Log
-We’ll keep a fast release cycle to quickly deliver and polish the upcoming features.
-+ **Version 0.1**
-  + **Environment decouple**: define your tool-use envinroment easily (tools setup and reward function definition)
-  + **Qwen3 Model support**: quickly train your agent using Qwen3 (much better than Qwen2.5 in tool-call)
-  + **Efficient training**: 2x faster than existing frameworks for rapid model iteration (mainly through async tool-use)
-+ **Version 0.2** (within 2 weeks) We are looking forward to more people participating in the development and construction together, to create a great Agenetic Training community. Please feel free to contact us.
-  - [ ] **WebUI**: build a WebUI for data processing, tool & environment definition, training configuration, and project management [#2](https://github.com/Simple-Efficient/RL-Factory/issues/2)
-  - [ ] **More efficient training**: support the AsyncLLMEngine for more efficient rollout and User Simulation (for multi-turn user interaction training) [#4](https://github.com/Simple-Efficient/RL-Factory/issues/4)
-  - [ ] **More models**: test more models (such as Deepseek, Llama, etc.) and add corresponding support configurations [#5](https://github.com/Simple-Efficient/RL-Factory/issues/5)
-  - [x] **Process Reward**: use process reward to better guide the tool-call behavior of your model [#6](https://github.com/Simple-Efficient/RL-Factory/issues/6)
-  - [ ] **More applications**: help create more demos (such as [TravelPlanner](https://github.com/OSU-NLP-Group/TravelPlanner)) to adapt to more benchmarks
 
 ## User Instructions
 - **Dependencies (Key)**
