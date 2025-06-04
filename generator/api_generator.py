@@ -8,18 +8,18 @@ from verl.utils.vllm_request import vllm_generate
 
 
 def register_api_method(name):
-    """装饰器用于将方法注册到字典中"""
+    """Decorator for registering methods into the dictionary"""
     def decorator(func):
-        # 在装饰器中不直接访问类，而是在类中处理
+        # Do not directly access the class in the decorator, handle it in the class instead
         func._api_method_name = name
         return func
     return decorator
 
 
 def register_async_api_method(name):
-    """装饰器用于将异步方法注册到字典中"""
+    """Decorator for registering async methods into the dictionary"""
     def decorator(func):
-        # 在装饰器中不直接访问类，而是在类中处理
+        # Do not directly access the class in the decorator, handle it in the class instead
         func._async_api_method_name = name
         return func
     return decorator
@@ -27,7 +27,7 @@ def register_async_api_method(name):
 
 @register_generator('api')
 class APIGenerator(BaseGenerator):
-    # 创建一个函数映射字典
+    # Create a function mapping dictionary
     api_methods = {}
     async_api_methods = {}
 
@@ -35,7 +35,7 @@ class APIGenerator(BaseGenerator):
         super().__init__(config)
         self.api_method = config.api_method
 
-        # 在初始化时注册所有带有 _api_method_name 属性的方法
+        # Register all methods with _api_method_name attribute during initialization
         for attr_name in dir(self):
             attr = getattr(self, attr_name)
             if callable(attr) and hasattr(attr, '_api_method_name'):
@@ -57,11 +57,11 @@ class APIGenerator(BaseGenerator):
             self.model_name = None
         
         self.selected_method = self.api_methods[self.api_method]
-        # 如果存在异步版本，也选择对应的异步方法
+        # If there is an async version, select the corresponding async method
         if self.api_method in self.async_api_methods:
             self.selected_async_method = self.async_api_methods[self.api_method]
         else:
-            # 如果没有实现特定的异步方法，提供一个基于同步方法的异步包装
+            # If no specific async method is implemented, provide an async wrapper based on the sync method
             self.selected_async_method = None
     
     @register_api_method('qwq')
@@ -84,7 +84,7 @@ class APIGenerator(BaseGenerator):
 
     @register_async_api_method('qwq')
     async def get_response_qwq_async(self, message_list, temperature=0.7):
-        # 使用线程池运行同步版本
+        # Use thread pool to run the synchronous version
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             None, self.get_response_qwq, message_list, temperature
@@ -110,7 +110,7 @@ class APIGenerator(BaseGenerator):
 
     @register_async_api_method('deepseek-r1')
     async def get_response_r1_async(self, message_list, temperature=0.7):
-        # 使用线程池运行同步版本
+        # Use thread pool to run the synchronous version
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             None, self.get_response_r1, message_list, temperature
@@ -121,12 +121,12 @@ class APIGenerator(BaseGenerator):
         stream = False
         response = ""
         
-        # 尝试调用API的最大次数
+        # Maximum number of attempts to call the API
         max_attempts = 3
         
         for attempt in range(max_attempts):
             try:
-                print(f"尝试调用API服务 (尝试 {attempt+1}/{max_attempts}), 端口: {self.port}")
+                print(f"Trying to call API service (attempt {attempt+1}/{max_attempts}), port: {self.port}")
                 generation_stream = vllm_generate(
                     f'http://0.0.0.0:{self.port}', message_list, model=self.model_name, 
                     temperature=temperature, stream=stream
@@ -139,41 +139,41 @@ class APIGenerator(BaseGenerator):
                 else:
                     response = generation_stream
                 
-                # 检查响应是否为空
+                # Check if the response is empty
                 if response is None or response == "":
-                    print(f"警告: API返回了空响应 (尝试 {attempt+1}/{max_attempts})")
+                    print(f"Warning: API returned an empty response (attempt {attempt+1}/{max_attempts})")
                     if attempt < max_attempts - 1:
-                        print("等待1秒后重试...")
+                        print("Waiting 1 second before retrying...")
                         time.sleep(1)
                         continue
                     else:
-                        print("所有尝试都失败，返回默认响应")
-                        return "API服务暂时不可用，请稍后再试。"
+                        print("All attempts failed, returning default response")
+                        return "API service is temporarily unavailable, please try again later."
                 else:
-                    # 正常获取到响应，跳出循环
+                    # Successfully obtained response, break the loop
                     break
                 
             except Exception as e:
-                print(f'API调用错误: {e} (尝试 {attempt+1}/{max_attempts})')
+                print(f'API call error: {e} (attempt {attempt+1}/{max_attempts})')
                 if attempt < max_attempts - 1:
-                    print("等待1秒后重试...")
+                    print("Waiting 1 second before retrying...")
                     time.sleep(1)
                 else:
-                    print("所有尝试都失败，返回默认响应")
-                    return "API服务暂时不可用，请稍后再试。"
+                    print("All attempts failed, returning default response")
+                    return "API service is temporarily unavailable, please try again later."
         
         return response
 
     @register_async_api_method('local')
     async def get_response_local_async(self, message_list, temperature=0.7):
-        """异步版本的本地VLLM API调用"""
+        """Asynchronous version of local VLLM API call"""
         stream = False
         response = ""
         max_attempts = 3
         
         for attempt in range(max_attempts):
             try:
-                print(f"尝试调用API服务 (尝试 {attempt+1}/{max_attempts}), 端口: {self.port}")
+                print(f"Trying to call API service (attempt {attempt+1}/{max_attempts}), port: {self.port}")
                 generation_stream = await vllm_generate(
                     f'http://0.0.0.0:{self.port}', 
                     message_list, 
@@ -190,34 +190,34 @@ class APIGenerator(BaseGenerator):
                 else:
                     response = generation_stream
                 
-                # 检查响应是否为空
+                # Check if the response is empty
                 if response is None or response == "":
-                    print(f"警告: API返回了空响应 (尝试 {attempt+1}/{max_attempts})")
+                    print(f"Warning: API returned an empty response (attempt {attempt+1}/{max_attempts})")
                     if attempt < max_attempts - 1:
-                        print("等待1秒后重试...")
+                        print("Waiting 1 second before retrying...")
                         await asyncio.sleep(1)
                         continue
                     else:
-                        print("所有尝试都失败，返回默认响应")
-                        return "API服务暂时不可用，请稍后再试。"
+                        print("All attempts failed, returning default response")
+                        return "API service is temporarily unavailable, please try again later."
                 else:
-                    # 正常获取到响应，跳出循环
+                    # Successfully obtained response, break the loop
                     break
                 
             except Exception as e:
-                print(f'API调用错误: {e} (尝试 {attempt+1}/{max_attempts})')
+                print(f'API call error: {e} (attempt {attempt+1}/{max_attempts})')
                 if attempt < max_attempts - 1:
-                    print("等待1秒后重试...")
+                    print("Waiting 1 second before retrying...")
                     await asyncio.sleep(1)
                 else:
-                    print("所有尝试都失败，返回默认响应")
-                    return "API服务暂时不可用，请稍后再试。"
+                    print("All attempts failed, returning default response")
+                    return "API service is temporarily unavailable, please try again later."
         
         return response
 
     def generate(self, input_data, temperature=0.7):
-        """同步生成方法"""
-        # 检查输入的类型。如果是字符串，转换为 message_list 格式
+        """Synchronous generation method"""
+        # Check the type of input. If it is a string, convert to message_list format
         if isinstance(input_data, str):
             message_list = [{'role': 'system', 'content': input_data}]
         elif isinstance(input_data, list):
@@ -225,12 +225,12 @@ class APIGenerator(BaseGenerator):
         else:
             raise ValueError("Input must be either a list or a string.")
 
-        # 调用选择的方法
+        # Call the selected method
         return self.selected_method(message_list, temperature)
 
     async def generate_async(self, input_data, temperature=0.7):
-        """异步生成方法"""
-        # 检查输入的类型。如果是字符串，转换为 message_list 格式
+        """Asynchronous generation method"""
+        # Check the type of input. If it is a string, convert to message_list format
         if isinstance(input_data, str):
             message_list = [{'role': 'system', 'content': input_data}]
         elif isinstance(input_data, list):
@@ -238,11 +238,11 @@ class APIGenerator(BaseGenerator):
         else:
             raise ValueError("Input must be either a list or a string.")
 
-        # 如果有异步方法，调用对应的异步方法
+        # If there is an async method, call the corresponding async method
         if self.selected_async_method:
             return await self.selected_async_method(message_list, temperature)
         else:
-            # 没有对应的异步方法，使用线程池运行同步方法
+            # If there is no corresponding async method, use thread pool to run the sync method
             loop = asyncio.get_running_loop()
             return await loop.run_in_executor(
                 None, self.selected_method, message_list, temperature
