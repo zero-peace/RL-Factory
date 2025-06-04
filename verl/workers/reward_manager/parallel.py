@@ -146,8 +146,8 @@ class AsyncRewardManager:
                     step_index.append(tool_end_positions[i]['im_end_positions'][2 * j])
                 step_index.append(last_one_idx)
 
-            #根据是否使用过程奖励来定义step_mask
-            if self.use_process_reward:
+            #根据是否使用过程奖励以及if_val来定义step_mask
+            if self.use_process_reward and not self.if_val:
                 for idx in step_index:
                     step_mask[i, idx] = 1
             else:
