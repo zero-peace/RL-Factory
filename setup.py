@@ -68,7 +68,7 @@ this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
 
 setup(
-    name="verl",
+    name="rl_factory",
     version=__version__,
     package_dir={"": "."},
     packages=find_packages(where="."),
