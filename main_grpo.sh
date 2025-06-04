@@ -1,6 +1,8 @@
 set -e -x
 
-export MODEL_PATH=/your/path/to/Qwen/Qwen3-8B
+export MODEL_PATH=/mnt/dolphinfs/hdd_pool/docker/share/xuzekun02/huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct
+#export MODEL_PATH=/mnt/dolphinfs/hdd_pool/docker/share/xuzekun02/huggingface.co/meta-llama/Llama-3.1-8B-Instruct
+#export MODEL_PATH=/mnt/dolphinfs/hdd_pool/docker/share/xuzekun02/huggingface.co/Qwen/Qwen3-4B
 export REWARD_MODEL_PATH=/your/path/to/Qwen/QwQ-32B
 # export VLLM_ATTENTION_BACKEND=XFORMERS
 
@@ -35,9 +37,9 @@ python3 -m verl.trainer.main_ppo\
     actor_rollout_ref.rollout.free_cache_engine=False\
     actor_rollout_ref.env.name=search\
     actor_rollout_ref.env.mcp_mode=stdio\
-    actor_rollout_ref.env.tool_manager=qwen3\
+    actor_rollout_ref.env.tool_manager=null\
     actor_rollout_ref.env.enable_thinking=False\
-    actor_rollout_ref.env.config_path=/your/path/to/envs/configs/mcp_tools.pydata\
+    actor_rollout_ref.env.config_path=envs/configs/mcp_tools.pydata\
     reward_rollout.if_use_reward_rollout=False\
     reward_rollout.rollout.tensor_model_parallel_size=4\
     reward_rollout.rollout.gpu_memory_utilization=0.75\
@@ -55,6 +57,6 @@ python3 -m verl.trainer.main_ppo\
     trainer.val_before_train=False\
     trainer.default_local_dir=ckpt\
     trainer.default_hdfs_dir=null\
-    trainer.save_freq=20\
+    trainer.save_freq=200\
     trainer.test_freq=10\
     trainer.total_epochs=5 $@ 2>&1 | tee grpo.log
