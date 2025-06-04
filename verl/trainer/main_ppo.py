@@ -16,6 +16,7 @@ Note that we don't combine the main with ray_trainer as ray_trainer is used by o
 """
 
 import os
+import json
 
 import hydra
 import ray
@@ -99,6 +100,11 @@ class TaskRunner:
         trust_remote_code = config.data.get("trust_remote_code", False)
         tokenizer = hf_tokenizer(local_path, trust_remote_code=trust_remote_code)
         processor = hf_processor(local_path, use_fast=True)  # used for multimodal LLM, could be none
+        
+        config_path = os.path.join(local_path, "config.json")
+        with open(config_path, "r", encoding="utf-8") as f:
+            model_config = json.load(f)
+        config.actor_rollout_ref.env.model_type = model_config.get("model_type", "unknown")
         
         env_object = TOOL_ENV_REGISTRY[config.actor_rollout_ref.env.name](config=config.actor_rollout_ref.env)
 
