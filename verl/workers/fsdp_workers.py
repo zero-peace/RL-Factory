@@ -116,6 +116,11 @@ class ActorRolloutRefWorker(Worker):
         self._is_rollout = self.role in ["rollout", "actor_rollout", "actor_rollout_ref"]
         self._is_ref = self.role in ["ref", "actor_rollout_ref"]
 
+        # 初始化集中式工具管理器Actor句柄
+        self.centralized_tool_actor = None
+        if hasattr(self.config, 'env') and self.config.env.get('tool_manager', '').startswith('centralized_'):
+            self._init_centralized_tool_actor()
+
         self._is_offload_param = False
         self._is_offload_optimizer = False
         if self._is_actor:
@@ -147,6 +152,43 @@ class ActorRolloutRefWorker(Worker):
         if self._is_ref and self.config.ref.log_prob_micro_batch_size is not None:
             self.config.ref.log_prob_micro_batch_size //= self.device_mesh.size() // self.ulysses_sequence_parallel_size
             self.config.ref.log_prob_micro_batch_size_per_gpu = self.config.ref.log_prob_micro_batch_size
+
+    def _init_centralized_tool_actor(self):
+        """初始化集中式工具管理器Actor"""
+        import ray
+        from envs.tool_manager.centralized_qwen3_manager import CentralizedToolActor
+        
+        # 只有rank 0的worker负责创建集中式Actor
+        if self.rank == 0:
+            try:
+                # 尝试获取已存在的Actor
+                centralized_actor = ray.get_actor("centralized_tool_actor")
+                print("发现已存在的集中式工具Actor")
+            except ValueError:
+                # Actor不存在，创建新的
+                print("创建新的集中式工具Actor - rank {}".format(self.rank))
+                centralized_actor = CentralizedToolActor.options(
+                    name="centralized_tool_actor",
+                    # max_concurrency=1000  # 允许最多1000个并发请求
+                ).remote(self.config.env)
+            
+            self.centralized_tool_actor = centralized_actor
+        else:
+            # 其他worker等待并获取Actor句柄
+            import time
+            max_wait_time = 60  # 最多等待60秒
+            start_time = time.time()
+            
+            while time.time() - start_time < max_wait_time:
+                try:
+                    self.centralized_tool_actor = ray.get_actor("centralized_tool_actor")
+                    print(f"Worker {self.rank} 成功获取集中式工具Actor")
+                    break
+                except ValueError:
+                    time.sleep(1)  # 等待1秒后重试
+            
+            if self.centralized_tool_actor is None:
+                raise RuntimeError(f"Worker {self.rank} 在{max_wait_time}秒内无法获取集中式工具Actor")
 
     def _build_model_optimizer(
         self,
@@ -562,7 +604,11 @@ class ActorRolloutRefWorker(Worker):
                 checkpoint_contents=self.config.actor.checkpoint.contents,
             )
         
-        self.env_object = TOOL_ENV_REGISTRY[self.config.env.name](config=self.config.env)
+        # 创建环境对象，传递集中式Actor句柄（如果使用集中式模式）
+        self.env_object = TOOL_ENV_REGISTRY[self.config.env.name](
+            config=self.config.env, 
+            centralized_actor=self.centralized_tool_actor
+        )
 
     @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
     def update_actor(self, data: DataProto):

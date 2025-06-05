@@ -69,7 +69,7 @@ class ToolUtils:
             skip_special_tokens=False,
         )
 
-        infos_str, dones, _, _  = self.env_object.step(
+        infos_str, dones, _, _ = self.env_object.step(
             responses=responses_str, tokenizer=self.tokenizer
         )
 
