@@ -156,7 +156,7 @@ class ActorRolloutRefWorker(Worker):
     def _init_centralized_tool_actor(self):
         """初始化集中式工具管理器Actor"""
         import ray
-        from envs.tool_manager.centralized_qwen3_manager import CentralizedToolActor
+        from envs.tool_manager.centralized.centralized_qwen3_manager import CentralizedToolActor
         
         # 只有rank 0的worker负责创建集中式Actor
         if self.rank == 0:
@@ -169,7 +169,7 @@ class ActorRolloutRefWorker(Worker):
                 print("创建新的集中式工具Actor - rank {}".format(self.rank))
                 centralized_actor = CentralizedToolActor.options(
                     name="centralized_tool_actor",
-                    # max_concurrency=1000  # 允许最多1000个并发请求
+                    max_concurrency=self.config.actor_rollout_ref.env.get('max_concurrency', 10)
                 ).remote(self.config.env)
             
             self.centralized_tool_actor = centralized_actor

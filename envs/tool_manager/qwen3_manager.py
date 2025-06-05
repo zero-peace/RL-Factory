@@ -227,8 +227,10 @@ class QwenManager(ToolManager):
         elif isinstance(tool, dict) and 'mcpServers' in tool:
             print(f'MCP is using {self.verl_config.mcp_mode} mode')
             if self.verl_config.mcp_mode == 'sse':
-                tools = SSEMCPManager().initConfig(tool)
-                # tools = AsyncMCPManager().initConfig(tool)
+                if self.verl_config.parallel_sse_tool_call.is_enabled:
+                    tools = AsyncMCPManager(num_instances=self.verl_config.parallel_sse_tool_call.num_instances).initConfig(tool)
+                else:
+                    tools = SSEMCPManager().initConfig(tool)
             elif self.verl_config.mcp_mode == 'stdio':
                 tools = MCPManager().initConfig(tool)
             else:

@@ -264,19 +264,20 @@ class MCPManager:
         return tools
 
     def create_tool_class(self, register_name, register_client_id, tool_name, tool_desc, tool_parameters):
+        manager_instance = self  # 保存当前manager实例的引用
 
         class ToolClass(BaseTool):
             name = register_name
             description = tool_desc
             parameters = tool_parameters
             client_id = register_client_id
+            _manager = manager_instance  # 在类中保存manager实例的引用
 
             def call(self, params: Union[str, dict], **kwargs) -> str:
                 tool_args = json.loads(params)
-                # Submit coroutine to the event loop and wait for the result
-                manager = MCPManager()
-                client = manager.clients[self.client_id]
-                future = asyncio.run_coroutine_threadsafe(client.execute_function(tool_name, tool_args), manager.loop)
+                # 使用保存的manager实例而不是获取新的单例
+                client = self._manager.clients[self.client_id]
+                future = asyncio.run_coroutine_threadsafe(client.execute_function(tool_name, tool_args), self._manager.loop)
                 try:
                     result = future.result()
                     return result

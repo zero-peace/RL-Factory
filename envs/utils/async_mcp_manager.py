@@ -37,7 +37,7 @@ class LoadBalancedTool(BaseTool):
                         self._instance_states.append([0, time.time()])
                         break
             except Exception as e:
-                logger.error(f"Failed to create instance {i}: {e}")
+                logger.error(f"Failed to create instance: {e}")
                 continue
         
         if not self.instances:
@@ -59,7 +59,7 @@ class LoadBalancedTool(BaseTool):
                 if load < min_load:
                     min_load = load
                     selected_idx = idx
-                    
+            
             self._instance_states[selected_idx][0] += 1
             self._instance_states[selected_idx][1] = time.time()
         

@@ -105,7 +105,7 @@ class TaskRunner:
         tool_manager_name = config.actor_rollout_ref.env.get('tool_manager', 'qwen3')
         if tool_manager_name.startswith('centralized_'):
             import ray
-            from envs.tool_manager.centralized_qwen3_manager import CentralizedToolActor
+            from envs.tool_manager.centralized.centralized_qwen3_manager import CentralizedToolActor
             
             # 在主进程中创建集中式工具Actor
             try:
@@ -113,7 +113,10 @@ class TaskRunner:
                 print("- main ppo: 发现已存在的集中式工具Actor")
             except ValueError:
                 print("- main ppo: 在trainer中创建集中式工具Actor")
-                centralized_tool_actor = CentralizedToolActor.options(name="centralized_tool_actor").remote(config.actor_rollout_ref.env)
+                centralized_tool_actor = CentralizedToolActor.options(
+                    name="centralized_tool_actor",
+                    max_concurrency=config.actor_rollout_ref.env.get('max_concurrency', 10)
+                ).remote(config.actor_rollout_ref.env)
         
         env_object = TOOL_ENV_REGISTRY[config.actor_rollout_ref.env.name](
             config=config.actor_rollout_ref.env,
