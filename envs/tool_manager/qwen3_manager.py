@@ -45,7 +45,7 @@ class QwenManager(ToolManager):
         
         # 创建并发限制器
         if self.verl_config.enable_limiter:
-            global_limit = getattr(verl_config, 'max_global_concurrent', 100)
+            global_limit = getattr(verl_config, 'max_concurrency', 100)
             self._limiter = ConcurrencyLimiter(global_limit=global_limit)
         else:
             self._limiter = None
