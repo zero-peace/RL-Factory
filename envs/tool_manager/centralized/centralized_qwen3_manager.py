@@ -148,7 +148,4 @@ class CentralizedToolActor:
             loop = asyncio.get_event_loop()
             result = loop.run_until_complete(_execute_tool(tool))
         
-        with open("outputs/result.txt", 'a') as f:
-            f.write('result: {}\n'.format(result))
-        
         return result
