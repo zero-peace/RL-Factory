@@ -7,7 +7,7 @@ RUN pip3 uninstall -y pytorch-quantization \
     pytorch-triton torch torch-tensorrt torchvision \
     xgboost transformer_engine flash_attn apex megatron-core
 
-# Define environments
+# Define environments 
 ENV MAX_JOBS=32
 ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
 ENV DEBIAN_FRONTEND=noninteractive
