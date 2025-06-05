@@ -13,6 +13,8 @@ from envs.utils.util import ToolServiceError, DocParserError
 from envs.utils.mcp_manager import MCPManager as SSEMCPManager
 from qwen_agent.tools import TOOL_REGISTRY, MCPManager, BaseTool
 from qwen_agent.llm.schema import ASSISTANT, SYSTEM, USER, FUNCTION, ContentItem
+from envs.utils.concurrency_limiter import ConcurrencyLimiter
+from envs.utils.async_mcp_manager import AsyncMCPManager
 
 
 def parse_mcp_tools_config(file_path):
@@ -40,6 +42,13 @@ class QwenManager(ToolManager):
             'lang': 'en',
             'max_input_tokens': 10000
         }
+        
+        # 创建并发限制器
+        if self.verl_config.enable_limiter:
+            global_limit = getattr(verl_config, 'max_global_concurrent', 100)
+            self._limiter = ConcurrencyLimiter(global_limit=global_limit)
+        else:
+            self._limiter = None
 
     def get_tool(self, name_or_short_name: str):
         """通过名称或简写获取工具
@@ -72,6 +81,31 @@ class QwenManager(ToolManager):
         
         self.functions = [func.function for func in self.tool_map.values()]
 
+    async def execute_all_tools_with_limiter(self, actions, tools):
+        """并行执行工具调用"""
+        async def execute_single_tool(tool):
+            """执行单个工具调用"""
+            try:
+                tool_name = tool.get("name", "default")
+            
+                async with self._limiter.limit(tool_name):
+                    # 执行工具调用
+                    result = await self._call_tool(tool_name, tool.get("args", ""))
+                    return result
+                
+            except Exception as e:
+                print(f"工具调用失败: {e}")
+                return f"# 工具调用失败: {str(e)}"
+        
+        tasks = []
+        for action, tool_list in zip(actions, tools):
+            if action == "actions":
+                for tool in tool_list:
+                    tasks.append(execute_single_tool(tool))
+        
+        results = await asyncio.gather(*tasks)
+        return results
+    
     async def execute_all_tools(self, actions, tool_list):
         """异步并行执行所有工具列表
         
@@ -194,6 +228,7 @@ class QwenManager(ToolManager):
             print(f'MCP is using {self.verl_config.mcp_mode} mode')
             if self.verl_config.mcp_mode == 'sse':
                 tools = SSEMCPManager().initConfig(tool)
+                # tools = AsyncMCPManager().initConfig(tool)
             elif self.verl_config.mcp_mode == 'stdio':
                 tools = MCPManager().initConfig(tool)
             else:
@@ -233,11 +268,19 @@ class QwenManager(ToolManager):
 
         # 使用asyncio.run同步运行异步函数
         try:
-            tool_results = asyncio.run(self.execute_all_tools(actions, tools))
+            if self.verl_config.enable_limiter:
+                assert self._limiter is not None, "Limiter is not enabled"
+                tool_results = asyncio.run(self.execute_all_tools_with_limiter(actions, tools))
+            else:
+                tool_results = asyncio.run(self.execute_all_tools(actions, tools))
         except RuntimeError:
             # 如果事件循环已经在运行，则获取当前循环
             loop = asyncio.get_event_loop()
-            tool_results = loop.run_until_complete(self.execute_all_tools(actions, tools))
+            if self.verl_config.enable_limiter:
+                assert self._limiter is not None, "Limiter is not enabled"
+                tool_results = loop.run_until_complete(self.execute_all_tools_with_limiter(actions, tools))
+            else:
+                tool_results = loop.run_until_complete(self.execute_all_tools(actions, tools))
         
         return actions, tool_results
     

@@ -7,8 +7,8 @@ from .base import Env
 from verl import DataProto
 
 class SearchEnv(Env):
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, config, centralized_actor=None):
+        super().__init__(config, centralized_actor)
         self.use_verify_tool = False
 
     def get_step_reward(self, responses, format_score=0.1):

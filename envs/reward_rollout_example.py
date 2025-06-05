@@ -5,8 +5,8 @@ from .base import Env
 
 
 class RewardRolloutEnv(Env):
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, config, centralized_actor=None):
+        super().__init__(config, centralized_actor)
         self.use_verify_tool = False
 
     def _get_single_prompt_str(self, data_source, solution_str, ground_truth, extra_info, reward_tokenizer):

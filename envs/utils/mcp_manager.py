@@ -1,4 +1,16 @@
-# copy from qwen agent
+# Copyright 2023 The Qwen team, Alibaba Group. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import asyncio
 import atexit
@@ -247,6 +259,8 @@ class MCPManager:
                                                                   tool_parameters=read_resource_params)
                 tools.append(read_resource_agent_tool)
 
+        self.tools = tools
+        
         return tools
 
     def create_tool_class(self, register_name, register_client_id, tool_name, tool_desc, tool_parameters):
@@ -323,7 +337,7 @@ class MCPClient:
             if 'url' in mcp_server:
                 url = mcp_server.get('url')
                 sse_read_timeout = mcp_server.get('sse_read_timeout', 300)
-                logger.info(f'{mcp_server_name} sse_read_timeout: {sse_read_timeout}s')
+                # logger.info(f'{mcp_server_name} sse_read_timeout: {sse_read_timeout}s')
                 if mcp_server.get('type', 'sse') == 'streamable-http':
                     # streamable-http mode
                     """streamable-http mode mcp example:
@@ -391,7 +405,7 @@ class MCPClient:
         try:
             await self.session.send_ping()
         except Exception as e:
-            logger.info(f"Session is not alive, please increase 'sse_read_timeout' in the config, try reconnect: {e}")
+            # logger.info(f"Session is not alive, please increase 'sse_read_timeout' in the config, try reconnect: {e}")
             # Auto reconnect
             try:
                 from qwen_agent.tools.mcp_manager import MCPManager

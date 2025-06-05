@@ -100,7 +100,25 @@ class TaskRunner:
         tokenizer = hf_tokenizer(local_path, trust_remote_code=trust_remote_code)
         processor = hf_processor(local_path, use_fast=True)  # used for multimodal LLM, could be none
         
-        env_object = TOOL_ENV_REGISTRY[config.actor_rollout_ref.env.name](config=config.actor_rollout_ref.env)
+        # 检查是否使用集中式工具管理
+        centralized_tool_actor = None
+        tool_manager_name = config.actor_rollout_ref.env.get('tool_manager', 'qwen3')
+        if tool_manager_name.startswith('centralized_'):
+            import ray
+            from envs.tool_manager.centralized_qwen3_manager import CentralizedToolActor
+            
+            # 在主进程中创建集中式工具Actor
+            try:
+                centralized_tool_actor = ray.get_actor("centralized_tool_actor")
+                print("- main ppo: 发现已存在的集中式工具Actor")
+            except ValueError:
+                print("- main ppo: 在trainer中创建集中式工具Actor")
+                centralized_tool_actor = CentralizedToolActor.options(name="centralized_tool_actor").remote(config.actor_rollout_ref.env)
+        
+        env_object = TOOL_ENV_REGISTRY[config.actor_rollout_ref.env.name](
+            config=config.actor_rollout_ref.env,
+            centralized_actor=centralized_tool_actor
+        )
 
         # define worker classes
         if config.actor_rollout_ref.actor.strategy in ["fsdp", "fsdp2"]:

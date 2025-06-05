@@ -145,6 +145,9 @@ actor_rollout_ref:
     enable_thinking: True
     max_prompt_length: 2048
     use_process_reward: False
+    enable_limiter: False
+    max_global_concurrent: 16
+    tool_timeout: 10
 
 critic:
   rollout_n: ${actor_rollout_ref.rollout.n}
