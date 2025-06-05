@@ -103,8 +103,8 @@ class TaskRunner:
         # 检查是否使用集中式工具管理
         centralized_tool_actor = None
         tool_manager_name = config.actor_rollout_ref.env.get('tool_manager', 'qwen3')
+        import ray
         if tool_manager_name.startswith('centralized_'):
-            import ray
             from envs.tool_manager.centralized.centralized_qwen3_manager import CentralizedToolActor
             
             # 在主进程中创建集中式工具Actor
