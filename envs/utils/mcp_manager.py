@@ -409,7 +409,6 @@ class MCPClient:
             # logger.info(f"Session is not alive, please increase 'sse_read_timeout' in the config, try reconnect: {e}")
             # Auto reconnect
             try:
-                from qwen_agent.tools.mcp_manager import MCPManager
                 manager = MCPManager()
                 if self.client_id is not None:
                     manager.clients[self.client_id] = await self.reconnect()
