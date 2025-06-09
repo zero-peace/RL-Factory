@@ -723,36 +723,25 @@ class ActorRolloutRefWorker(Worker):
 
             log_gpu_memory_usage('After entering rollout sharding manager', logger=logger)
             max_turns = self.rollout.config.max_turns
-            end_flag, end_step, last_prompts = False, 0, deepcopy(prompts)
+            vllm_tp_size = self.config.rollout.tensor_model_parallel_size            
             for step in range(max_turns):
-                if end_flag:
-                    prompts = deepcopy(last_prompts)
-                
                 prompts = self.rollout_sharding_manager.preprocess_data(prompts)
-
-                # barrier for tp > 1 to avoid race condition
-                torch.distributed.barrier()
-
+                if vllm_tp_size > 1:
+                    torch.distributed.barrier()
+                
                 output = self.rollout.generate_sequences(prompts=prompts)
-
                 log_gpu_memory_usage('After rollout generation', logger=logger)
                 output = self.rollout_sharding_manager.postprocess_data(output)
                 output = output.to('cpu')
-                if not end_flag:
-                    output.meta_info.update(prompts.meta_info)
-                    prompts = su.postprocess_output(output, step)
-                
-                if prompts is None:
-                    end_flag = True
-                    end_step = step
-                    last_prompts.meta_info['do_sample'] = False
+                output.meta_info.update(prompts.meta_info)
+                if vllm_tp_size > 1:
+                    prompts = su.postprocess_output_tp(output, step)
                 else:
-                    prompts = prompts.to(torch.cuda.current_device())
-                    last_prompts.meta_info.update(prompts.meta_info)
-
-                torch.distributed.barrier()
+                    prompts = su.postprocess_output(output, step)
+                    if prompts is None:
+                        break
             
-            output = su.compose_final_output(step=end_step)
+            output = su.compose_final_output(step=step)
 
         output = output.to('cpu')
 
