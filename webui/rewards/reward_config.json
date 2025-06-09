@@ -1,8 +1,8 @@
 {
   "rules": [
     {
-      "type": "结果标签",
-      "label": "answer",
+      "type": "工具标签",
+      "label": "tool_call",
       "requirements": [
         {
           "type": "format",
@@ -11,13 +11,8 @@
             "example": "aaa",
             "mode": "均值",
             "coefficient": 1,
-            "grader_configs": [
-              {
-                "grader": "qwen_math",
-                "parse_field": "aaa",
-                "answer_field": "aaaa"
-              }
-            ]
+            "grader_configs": null,
+            "grader": null
           }
         }
       ]

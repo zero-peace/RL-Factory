@@ -29,6 +29,12 @@ class BaseGrader(ABC):
         """评分器描述"""
         pass
 
+    @property
+    @abstractmethod
+    def gt_required(self) -> bool:
+        """是否需要gt"""
+        pass
+
 class GraderRegistry:
     """评分器注册器"""
     
