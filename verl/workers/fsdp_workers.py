@@ -19,6 +19,7 @@ import logging
 import os
 import warnings
 from typing import Union
+from copy import deepcopy
 
 import psutil
 import torch
@@ -691,6 +692,7 @@ class ActorRolloutRefWorker(Worker):
 
     @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
     def generate_sequences_loop(self, prompts: DataProto):
+        # TODO: Temporary fix bus for tp > 1, optimization will be done later
         prompts = prompts.to(torch.cuda.current_device())
 
         assert self._is_rollout
@@ -707,6 +709,7 @@ class ActorRolloutRefWorker(Worker):
         }
 
         prompts.meta_info.update(meta_info)
+        prompts.non_tensor_batch.pop("tools_kwargs")
 
         su = ToolUtils(self.tokenizer, meta_info, self.rollout.config, env_object=self.env_object)
 
@@ -720,21 +723,36 @@ class ActorRolloutRefWorker(Worker):
 
             log_gpu_memory_usage('After entering rollout sharding manager', logger=logger)
             max_turns = self.rollout.config.max_turns
-            # max_turns = 1
+            end_flag, end_step, last_prompts = False, 0, deepcopy(prompts)
             for step in range(max_turns):
+                if end_flag:
+                    prompts = deepcopy(last_prompts)
+                
                 prompts = self.rollout_sharding_manager.preprocess_data(prompts)
+
+                # barrier for tp > 1 to avoid race condition
+                torch.distributed.barrier()
+
                 output = self.rollout.generate_sequences(prompts=prompts)
 
                 log_gpu_memory_usage('After rollout generation', logger=logger)
                 output = self.rollout_sharding_manager.postprocess_data(output)
-
                 output = output.to('cpu')
-                output.meta_info.update(prompts.meta_info)
-                prompts = su.postprocess_output(output, step)
+                if not end_flag:
+                    output.meta_info.update(prompts.meta_info)
+                    prompts = su.postprocess_output(output, step)
+                
                 if prompts is None:
-                    break
+                    end_flag = True
+                    end_step = step
+                    last_prompts.meta_info['do_sample'] = False
+                else:
+                    prompts = prompts.to(torch.cuda.current_device())
+                    last_prompts.meta_info.update(prompts.meta_info)
+
+                torch.distributed.barrier()
             
-            output = su.compose_final_output(step=step)
+            output = su.compose_final_output(step=end_step)
 
         output = output.to('cpu')
 
