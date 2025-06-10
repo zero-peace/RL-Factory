@@ -16,6 +16,7 @@ Note that we don't combine the main with ray_trainer as ray_trainer is used by o
 """
 
 import os
+import json
 
 import hydra
 import ray
@@ -117,6 +118,10 @@ class TaskRunner:
                     name="centralized_tool_actor",
                     max_concurrency=config.actor_rollout_ref.env.get('max_concurrency', 10)
                 ).remote(config.actor_rollout_ref.env)
+        config_path = os.path.join(local_path, "config.json")
+        with open(config_path, "r", encoding="utf-8") as f:
+            model_config = json.load(f)
+        config.actor_rollout_ref.env.model_type = model_config.get("model_type", "unknown")
         
         env_object = TOOL_ENV_REGISTRY[config.actor_rollout_ref.env.name](
             config=config.actor_rollout_ref.env,
