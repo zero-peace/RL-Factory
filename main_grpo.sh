@@ -1,8 +1,6 @@
 set -e -x
 
-export MODEL_PATH=/mnt/dolphinfs/hdd_pool/docker/share/xuzekun02/huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct
-#export MODEL_PATH=/mnt/dolphinfs/hdd_pool/docker/share/xuzekun02/huggingface.co/meta-llama/Llama-3.1-8B-Instruct
-#export MODEL_PATH=/mnt/dolphinfs/hdd_pool/docker/share/xuzekun02/huggingface.co/Qwen/Qwen3-4B
+export MODEL_PATH=/your/path/to/Qwen/Qwen3-4B
 export REWARD_MODEL_PATH=/your/path/to/Qwen/QwQ-32B
 # export VLLM_ATTENTION_BACKEND=XFORMERS
 
