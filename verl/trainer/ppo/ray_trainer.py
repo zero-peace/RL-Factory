@@ -772,12 +772,14 @@ class RayPPOTrainer:
                 raise
             
             self.reward_fn.set_reward_rollout_wg(self.reward_rollout_wg)
+            self.val_reward_fn.set_reward_rollout_wg(self.reward_rollout_wg)
 
             from verl.utils.fs import copy_to_local
             from verl.utils import hf_tokenizer
             reward_local_path = copy_to_local(self.config.reward_rollout.rollout.model_name)
             reward_tokenizer = hf_tokenizer(reward_local_path, trust_remote_code=False)
             self.reward_fn.set_reward_tokenizer(reward_tokenizer)
+            self.val_reward_fn.set_reward_tokenizer(reward_tokenizer)
 
     def _save_checkpoint(self):
         # path: given_path + `/global_step_{global_steps}` + `/actor`
