@@ -101,12 +101,32 @@ class TaskRunner:
         tokenizer = hf_tokenizer(local_path, trust_remote_code=trust_remote_code)
         processor = hf_processor(local_path, use_fast=True)  # used for multimodal LLM, could be none
         
+        # 检查是否使用集中式工具管理
+        centralized_tool_actor = None
+        tool_manager_name = config.actor_rollout_ref.env.get('tool_manager', 'qwen3')
+        import ray
+        if tool_manager_name.startswith('centralized_'):
+            from envs.tool_manager.centralized.centralized_qwen3_manager import CentralizedToolActor
+            
+            # 在主进程中创建集中式工具Actor
+            try:
+                centralized_tool_actor = ray.get_actor("centralized_tool_actor")
+                print("- main ppo: 发现已存在的集中式工具Actor")
+            except ValueError:
+                print("- main ppo: 在trainer中创建集中式工具Actor")
+                centralized_tool_actor = CentralizedToolActor.options(
+                    name="centralized_tool_actor",
+                    max_concurrency=config.actor_rollout_ref.env.get('max_concurrency', 10)
+                ).remote(config.actor_rollout_ref.env)
         config_path = os.path.join(local_path, "config.json")
         with open(config_path, "r", encoding="utf-8") as f:
             model_config = json.load(f)
         config.actor_rollout_ref.env.model_type = model_config.get("model_type", "unknown")
         
-        env_object = TOOL_ENV_REGISTRY[config.actor_rollout_ref.env.name](config=config.actor_rollout_ref.env)
+        env_object = TOOL_ENV_REGISTRY[config.actor_rollout_ref.env.name](
+            config=config.actor_rollout_ref.env,
+            centralized_actor=centralized_tool_actor
+        )
 
         # define worker classes
         if config.actor_rollout_ref.actor.strategy in ["fsdp", "fsdp2"]:
@@ -188,13 +208,18 @@ class TaskRunner:
             reward_fn.set_env_object(env_object)
         except Exception as e:
             print(f"Error setting env object for reward_fn: {e}")
-        
+        #stop token
+        reward_fn.stop_token=config.actor_rollout_ref.rollout.stop[0]
+
         val_reward_fn = load_reward_manager(config, tokenizer, num_examine=1)
         try:
             val_reward_fn.set_env_object(env_object)
             val_reward_fn.if_val = True
         except Exception as e:
             print(f"Error setting env object for val_reward_fn: {e}")
+
+        val_reward_fn.stop_token=config.actor_rollout_ref.rollout.stop[0]
+
         
         resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
 

@@ -359,28 +359,40 @@ def grader(prediction, reference):
 class QwenMathGrader(BaseGrader):
     """数学问题评分器"""
     
+    _NAME = "qwen_math"
+    _DESCRIPTION = "通用数学问题评分器，支持数值计算、符号计算和LaTeX格式"
+    
     @property
     def name(self) -> str:
-        return "qwen_math"
+        return self._NAME
+    
+    @property
+    def gt_required(self) -> bool:
+        return True
     
     @property
     def description(self) -> str:
-        return "通用数学问题评分器，支持数值计算、符号计算和LaTeX格式"
+        return self._DESCRIPTION
     
-    def grade(self, prediction: Any, reference: Any) -> float:
+    def grade(self, extracted_answer, **kwargs) -> float:
         """评分方法
         
         Args:
-            prediction: 预测答案
-            reference: 标准答案
+            extracted_answer: 提取的答案
+            **kwargs: 可选参数，可能包含：
+                - data_source: 数据源
+                - solution_str: 解题答案
+                - ground_truth: 标准答案
+                - extra_info: 额外信息
             
         Returns:
             float: 1.0 表示完全正确，0.0 表示完全错误
         """
+        gt_answer_tag = kwargs['extra_info']['gt_answer_tag']
         try:
             result = math_equal(
-                prediction=prediction,
-                reference=reference,
+                prediction=extracted_answer,
+                reference=kwargs['ground_truth'][gt_answer_tag],
                 include_percentage=True,
                 is_close=True,
                 timeout=True

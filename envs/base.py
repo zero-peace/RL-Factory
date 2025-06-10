@@ -10,21 +10,31 @@ from verl.utils.torch_functional import tokenize_and_postprocess_data
 
 
 class Env(ABC):
-    def __init__(self, config):
-        tool_manager_name = config.get('tool_manager', 'qwen3')
-        
-        if not tool_manager_name:
+    def __init__(self, config, centralized_actor=None):
+        tool_manager_name = config.get('tool_manage
+                                       r', 'qwen3')
+        # 检查是否使用集中式工具管理器
+        if tool_manager_name.startswith('centralized_'):
+            if centralized_actor is None:
+                raise ValueError(f"使用集中式工具管理器 '{tool_manager_name}' 需要提供 centralized_actor 参数")
+            self.tool_manager = TOOL_MANAGER_REGISTRY[tool_manager_name](
+                verl_config=config, 
+                centralized_actor_handle=centralized_actor
+            )
+        else:
+            # 分布式模式，保持原有逻辑
+            if not tool_manager_name:
             model_type = config.get('model_type', 'llama3')
             if 'qwen3' in model_type:
                 tool_manager_name = 'qwen3'
             elif 'qwen2' in model_type:
                 tool_manager_name = 'qwen2_5'
             elif'llama' in model_type:
-                tool_manager_name = 'llama3'
-        
-        self.tool_manager = TOOL_MANAGER_REGISTRY[tool_manager_name](verl_config=config)
+                tool_manager_name = 'llama3'                     
+            self.tool_manager = TOOL_MANAGER_REGISTRY[tool_manager_name](verl_config=config)
         self.max_prompt_length = config.get('max_prompt_length', 2048)
         self.use_verify_tool = False
+        self.use_process_reward = config.get('use_process_reward', False)
         
     def verify_tool(self, data_source, solution_str, ground_truth, extra_info):
         # If you need a tool to evaluate the generated response, you need to modify the following code
@@ -59,6 +69,12 @@ class Env(ABC):
             'data_source': data_source,
             'extra_info': extra_info
         }
+    
+    def get_step_reward(self, responses, format_score=0.1):
+        
+        step_reward = [1] * len(responses)
+    
+        return step_reward
 
     def step(self, responses, tokenizer):
         cur_actions, tool_results = self.tool_manager.execute_actions(responses=responses)
@@ -90,14 +106,25 @@ class Env(ABC):
             dones.append(temp_done)
             valid_action.append(temp_valid_action)
             is_tool.append(temp_is_tool)
+
         
         return next_obs, dones, valid_action, is_tool
+    
 
-    def compute_score(self, reward_rollout_wg, reward_tokenizer, tokenizer, data: DataProto, if_val=False):
+    def compute_score(self, reward_rollout_wg, reward_tokenizer, tokenizer, data: DataProto, if_val=False, use_process_reward=False):
         if reward_rollout_wg is not None:
             scores = self._compute_score_with_reward_rollout_wg(reward_rollout_wg, reward_tokenizer, data)
         else:
-            scores = self._compute_score_with_rules(data, tokenizer, if_val=if_val)
+            score = self._compute_score_with_rules(data, tokenizer, if_val=if_val)
+            if use_process_reward and not if_val:
+                scores = []
+                for i in range(len(data)):
+                    data_item = data[i]
+                    tool_use_score = data_item.batch['tool_use_scores']
+                    validate_score = tool_use_score[ ~ torch.isnan(tool_use_score)].tolist()
+                    scores.append(validate_score + score[i])
+            else:
+                scores = score
         
         return scores
     
