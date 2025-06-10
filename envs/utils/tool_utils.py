@@ -16,7 +16,17 @@ class ToolUtils:
         self.max_turns = config.max_turns
         self.max_prompt_length = config.prompt_length
 
-        self.pad_token_id = meta_info.get('pad_token_id')
+        
+        pad_token_id = meta_info.get('pad_token_id')
+        if pad_token_id is not None:
+            self.pad_token_id = pad_token_id
+        else:
+            eos_token_id = meta_info.get('eos_token_id')
+            if isinstance(eos_token_id, (list, tuple)):
+                self.pad_token_id = eos_token_id[-1]
+            else:
+                self.pad_token_id = eos_token_id
+                
         eos_token_id = meta_info.get('eos_token_id')
         if isinstance(eos_token_id, (list, tuple)):
             self.eos_token_id = eos_token_id[0]
@@ -165,6 +175,12 @@ class ToolUtils:
 
         response_token = torch.tensor(input_ids_list, dtype=torch.int64)[:,:max_len]
         response_loss_mask = torch.tensor(loss_mask_list, dtype=torch.float32)
+        
+        # with open('response.txt','a') as f:
+        #     f.write(str(response_token.tolist()))
+        # with open('pad_id.txt','a') as f:
+        #     f.write(str(self.pad_token_id))
+        
         response_attention_mask = (response_token != self.pad_token_id).long()
 
         # get the max length of the process rewards
