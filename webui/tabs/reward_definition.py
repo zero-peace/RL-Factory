@@ -2,9 +2,333 @@ import gradio as gr
 import json
 import os
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional, Tuple
 
 from components.rewards.graders import GraderRegistry
+
+# 类型映射
+REQUIREMENT_TYPE_MAP = {
+    "count": "数量限制",
+    "length": "内容长度",
+    "format": "内容格式"
+}
+
+RULE_TYPE_MAP = {
+    "思考过程": "think",
+    "结果标签": "answer",
+    "工具标签": "tool_call"
+}
+
+# 规则配置相关的常量
+RESPONSE_POSITIONS = ["首位", "末尾", "整体", "每个"]
+LABEL_TYPES = ["思考过程", "结果标签", "工具标签", "自定义"]
+RULE_FORMS = ["数量", "长度", "格式", "得分"]
+
+def create_rule_definition_tab():
+    """创建规则定义标签页"""
+    with gr.Column() as tab:
+        # 规则列表状态
+        rules_state = gr.State([])
+        
+        # 添加规则按钮行
+        with gr.Row():
+            gr.Markdown("### 规则列表")
+            add_rule_btn = gr.Button("➕ 添加规则", scale=0)
+        
+        # 规则编辑区域
+        with gr.Group(visible=False) as rule_edit_group:
+            with gr.Row():
+                rule_description = gr.Textbox(
+                    label="规则描述",
+                    placeholder="请输入规则描述（不超过20字）",
+                    max_lines=1,
+                    scale=8
+                )
+                with gr.Column(scale=2):
+                    with gr.Row():
+                        save_rule_btn = gr.Button("保存", variant="primary", size="sm")
+                        cancel_rule_btn = gr.Button("取消", size="sm")
+            
+            with gr.Row():
+                response_position = gr.Dropdown(
+                    choices=RESPONSE_POSITIONS,
+                    label="回复选择",
+                    value=RESPONSE_POSITIONS[0],
+                    scale=2
+                )
+                
+                with gr.Column(scale=3):
+                    with gr.Row():
+                        label_type = gr.Dropdown(
+                            choices=LABEL_TYPES,
+                            label="标签类型",
+                            value=LABEL_TYPES[0],
+                            scale=1
+                        )
+                        custom_label = gr.Textbox(
+                            label="自定义标签",
+                            placeholder="请输入自定义标签",
+                            visible=False,
+                            scale=1
+                        )
+                
+                rule_form = gr.Dropdown(
+                    choices=RULE_FORMS,
+                    label="规则形式",
+                    value=RULE_FORMS[0],
+                    scale=2
+                )
+        
+        # 规则列表显示
+        rules_list = gr.Dataframe(
+            headers=["描述", "回复选择", "标签", "规则形式"],
+            datatype=["str", "str", "str", "str"],
+            col_count=(4, "fixed"),
+            wrap=True,
+            row_count=10,
+            interactive=False,
+            visible=True
+        )
+        
+        # 操作按钮区域
+        with gr.Row():
+            edit_rule_btn = gr.Button("✏️ 编辑选中规则", visible=False, variant="secondary")
+            delete_rule_btn = gr.Button("🗑️ 删除选中规则", visible=False, variant="stop")
+        
+        # 选中的规则索引
+        selected_rule_index = gr.State(None)
+        
+        # 编辑状态
+        edit_state = gr.State({
+            "active": False,
+            "index": None
+        })
+        
+        def toggle_rule_edit(show: bool, edit_state: Dict = None) -> Tuple[Dict, str, str, str, str, str]:
+            """切换规则编辑区域的显示状态"""
+            if not show and edit_state:
+                edit_state["active"] = False
+                edit_state["index"] = None
+            
+            return (
+                gr.update(visible=show),  # rule_edit_group
+                "",  # rule_description
+                RESPONSE_POSITIONS[0],  # response_position
+                LABEL_TYPES[0],  # label_type
+                "",  # custom_label
+                RULE_FORMS[0]  # rule_form
+            )
+        
+        def update_label_input(label_type: str) -> Dict:
+            """更新标签输入区域"""
+            return {
+                custom_label: gr.update(visible=label_type == "自定义")
+            }
+        
+        def save_rule(description: str, position: str, label_type: str, 
+                     custom_label: str, rule_form: str, rules: List[Dict],
+                     edit_state: Dict) -> Tuple[List[Dict], List[List], Dict, str, str, str, str, str]:
+            """保存规则"""
+            if not description or len(description) > 20:
+                gr.Warning("请输入有效的规则描述（不超过20字）")
+                return (
+                    rules,  # rules_state
+                    [[r["description"], r["position"], r["label"], r["form"]] for r in rules],  # rules_list
+                    gr.update(visible=True),  # rule_edit_group
+                    description,  # rule_description
+                    position,  # response_position
+                    label_type,  # label_type
+                    custom_label,  # custom_label
+                    rule_form  # rule_form
+                )
+            
+            # 获取实际的标签值
+            label = custom_label if label_type == "自定义" else label_type
+            
+            new_rule = {
+                "description": description,
+                "position": position,
+                "label": label,
+                "form": rule_form
+            }
+            
+            # 编辑模式
+            if edit_state["active"] and edit_state["index"] is not None:
+                rules[edit_state["index"]] = new_rule
+                edit_state["active"] = False
+                edit_state["index"] = None
+            else:
+                rules.append(new_rule)
+            
+            # 更新显示数据
+            display_data = [
+                [r["description"], r["position"], r["label"], r["form"]]
+                for r in rules
+            ]
+            
+            # 清空编辑区域并返回默认值
+            return (
+                rules,  # rules_state
+                display_data,  # rules_list
+                gr.update(visible=False),  # rule_edit_group
+                "",  # rule_description
+                RESPONSE_POSITIONS[0],  # response_position
+                LABEL_TYPES[0],  # label_type
+                "",  # custom_label
+                RULE_FORMS[0]  # rule_form
+            )
+        
+        def select_rule(evt: gr.SelectData, rules: List[Dict]) -> Tuple[int, Dict, Dict]:
+            """选择规则"""
+            row_index = evt.index[0]
+            return (
+                row_index,  # selected_rule_index
+                gr.update(visible=True),  # edit_rule_btn
+                gr.update(visible=True)  # delete_rule_btn
+            )
+        
+        def edit_selected_rule(rule_index: int, rules: List[Dict]) -> Tuple[Dict, str, str, str, str, str, Dict]:
+            """编辑选中的规则"""
+            if rule_index is None or rule_index >= len(rules):
+                return (
+                    gr.update(visible=False),  # rule_edit_group
+                    "",  # rule_description
+                    RESPONSE_POSITIONS[0],  # response_position
+                    LABEL_TYPES[0],  # label_type
+                    "",  # custom_label
+                    RULE_FORMS[0],  # rule_form
+                    {"active": False, "index": None}  # edit_state
+                )
+            
+            rule = rules[rule_index]
+            return (
+                gr.update(visible=True),  # rule_edit_group
+                rule["description"],  # rule_description
+                rule["position"],  # response_position
+                "自定义" if rule["label"] not in LABEL_TYPES else rule["label"],  # label_type
+                rule["label"] if rule["label"] not in LABEL_TYPES else "",  # custom_label
+                rule["form"],  # rule_form
+                {"active": True, "index": rule_index}  # edit_state
+            )
+        
+        def delete_selected_rule(rule_index: int, rules: List[Dict]) -> Tuple[List[Dict], List[List], Dict, Dict, int]:
+            """删除选中的规则"""
+            if rule_index is None or rule_index >= len(rules):
+                return (
+                    rules,  # rules_state
+                    [[r["description"], r["position"], r["label"], r["form"]] for r in rules],  # rules_list
+                    gr.update(visible=False),  # edit_rule_btn
+                    gr.update(visible=False),  # delete_rule_btn
+                    None  # selected_rule_index
+                )
+            
+            updated_rules = rules[:rule_index] + rules[rule_index + 1:]
+            display_data = [
+                [r["description"], r["position"], r["label"], r["form"]]
+                for r in updated_rules
+            ]
+            
+            return (
+                updated_rules,  # rules_state
+                display_data,  # rules_list
+                gr.update(visible=False),  # edit_rule_btn
+                gr.update(visible=False),  # delete_rule_btn
+                None  # selected_rule_index
+            )
+        
+        # 绑定事件
+        add_rule_btn.click(
+            fn=toggle_rule_edit,
+            inputs=[gr.State(True)],
+            outputs=[
+                rule_edit_group,
+                rule_description,
+                response_position,
+                label_type,
+                custom_label,
+                rule_form
+            ]
+        )
+        
+        cancel_rule_btn.click(
+            fn=toggle_rule_edit,
+            inputs=[gr.State(False), edit_state],
+            outputs=[
+                rule_edit_group,
+                rule_description,
+                response_position,
+                label_type,
+                custom_label,
+                rule_form
+            ]
+        )
+        
+        label_type.change(
+            fn=update_label_input,
+            inputs=[label_type],
+            outputs=[custom_label]
+        )
+        
+        save_rule_btn.click(
+            fn=save_rule,
+            inputs=[
+                rule_description,
+                response_position,
+                label_type,
+                custom_label,
+                rule_form,
+                rules_state,
+                edit_state
+            ],
+            outputs=[
+                rules_state,
+                rules_list,
+                rule_edit_group,
+                rule_description,
+                response_position,
+                label_type,
+                custom_label,
+                rule_form
+            ]
+        )
+        
+        rules_list.select(
+            fn=select_rule,
+            inputs=[rules_state],
+            outputs=[
+                selected_rule_index,
+                edit_rule_btn,
+                delete_rule_btn
+            ]
+        )
+        
+        edit_rule_btn.click(
+            fn=edit_selected_rule,
+            inputs=[selected_rule_index, rules_state],
+            outputs=[
+                rule_edit_group,
+                rule_description,
+                response_position,
+                label_type,
+                custom_label,
+                rule_form,
+                edit_state
+            ]
+        )
+        
+        delete_rule_btn.click(
+            fn=delete_selected_rule,
+            inputs=[selected_rule_index, rules_state],
+            outputs=[
+                rules_state,
+                rules_list,
+                edit_rule_btn,
+                delete_rule_btn,
+                selected_rule_index
+            ]
+        )
+    
+    return tab
 
 def create_reward_definition_tab():
     """奖赏定义主标签页"""
@@ -14,261 +338,14 @@ def create_reward_definition_tab():
         # 创建子标签页
         with gr.Tabs() as subtabs:
             with gr.TabItem("规则定义"):
-                rule_components = create_rule_definition_tab()
+                rule_tab = create_rule_definition_tab()
             
             with gr.TabItem("模型评判"):
-                model_components = create_model_evaluation_tab()
+                # TODO: 实现模型评判界面
+                pass
             
             with gr.TabItem("验证工具"):
-                validation_components = create_validation_tools_tab()
-        
-        # 导出按钮和结果显示
-        with gr.Row():
-            export_json = gr.Button("导出配置文件")
-            export_python = gr.Button("生成Python文件")
-        
-        output_json = gr.JSON(label="配置文件预览")
-        output_python = gr.Code(language="python", label="生成的Python代码")
-        
-        # 处理导出事件
-        def export_json_handler():
-            config = generate_reward_json(
-                rule_components,
-                model_components,
-                validation_components
-            )
-            # 保存到文件
-            os.makedirs("rewards", exist_ok=True)
-            json_path = f"rewards/{rule_components['reward_name']}.json"
-            with open(json_path, "w") as f:
-                json.dump(config, f, indent=2)
-            return config
-        
-        def export_python_handler(config):
-            python_code = generate_reward_python(config)
-            # 保存到文件
-            os.makedirs("rewards", exist_ok=True)
-            py_path = f"rewards/{config['name']}.py"
-            with open(py_path, "w") as f:
-                f.write(python_code)
-            return python_code
-        
-        export_json.click(
-            export_json_handler,
-            outputs=output_json
-        )
-        
-        export_python.click(
-            export_python_handler,
-            inputs=output_json,
-            outputs=output_python
-        )
+                # TODO: 实现验证工具界面
+                pass
     
     return tab
-
-
-def create_rule_definition_tab():
-    """规则定义子标签页"""
-    with gr.Blocks() as tab:
-        gr.Markdown("## 规则定义")
-        
-        with gr.Row():
-            with gr.Column():
-                reward_name = gr.Textbox(label="奖赏函数名称", placeholder="输入奖赏函数的名称")
-                reward_description = gr.Textbox(label="奖赏函数描述", lines=3, placeholder="描述该奖赏函数的功能和用途")
-                
-                gr.Markdown("### 基础规则设置")
-                with gr.Row():
-                    min_reward = gr.Number(label="最小奖赏值", value=-1.0)
-                    max_reward = gr.Number(label="最大奖赏值", value=1.0)
-                
-                reward_type = gr.Radio(
-                    choices=["离散", "连续"],
-                    label="奖赏类型",
-                    value="连续"
-                )
-                
-                custom_rules = gr.TextArea(
-                    label="自定义规则",
-                    placeholder="使用Python代码定义自定义规则...",
-                    lines=10
-                )
-        
-        return {
-            "reward_name": reward_name,
-            "reward_description": reward_description,
-            "min_reward": min_reward,
-            "max_reward": max_reward,
-            "reward_type": reward_type,
-            "custom_rules": custom_rules
-        }
-
-
-def create_model_evaluation_tab():
-    """模型评判子标签页"""
-    with gr.Blocks() as tab:
-        gr.Markdown("## 模型评判")
-        
-        with gr.Row():
-            with gr.Column():
-                use_model = gr.Checkbox(label="使用模型进行评判", value=False)
-                
-                # 获取所有已注册的评分器
-                graders = GraderRegistry.list_graders()
-                
-                with gr.Group() as model_group:
-                    grader_type = gr.Dropdown(
-                        choices=list(graders.keys()),
-                        label="评分器类型",
-                        interactive=True
-                    )
-                    
-                    # 显示评分器描述
-                    grader_description = gr.Markdown()
-                    
-                    def update_description(grader_name):
-                        if grader_name in graders:
-                            return f"**评分器说明**：{graders[grader_name]}"
-                        return ""
-                    
-                    grader_type.change(
-                        fn=update_description,
-                        inputs=[grader_type],
-                        outputs=[grader_description]
-                    )
-                    
-                    model_config = gr.JSON(
-                        label="评分器配置", 
-                        value={},
-                        visible=False
-                    )
-                    
-                    # 测试区域
-                    with gr.Row():
-                        test_input = gr.Textbox(label="测试输入")
-                        test_reference = gr.Textbox(label="参考答案")
-                    
-                    test_button = gr.Button("测试评分")
-                    test_result = gr.Number(label="评分结果", value=0.0)
-                    
-                    def test_grader(grader_name: str, test_input: str, test_reference: str) -> float:
-                        try:
-                            grader_class = GraderRegistry.get(grader_name)
-                            grader = grader_class()
-                            return grader.grade(test_input, test_reference)
-                        except Exception as e:
-                            print(f"评分测试出错：{e}")
-                            return 0.0
-                    
-                    test_button.click(
-                        fn=test_grader,
-                        inputs=[grader_type, test_input, test_reference],
-                        outputs=[test_result]
-                    )
-        
-        return {
-            "use_model": use_model,
-            "grader_type": grader_type,
-            "model_config": model_config
-        }
-
-
-def create_validation_tools_tab():
-    """验证工具子标签页"""
-    with gr.Blocks() as tab:
-        gr.Markdown("## 验证工具")
-        
-        with gr.Row():
-            with gr.Column():
-                test_data = gr.File(label="上传测试数据")
-                validation_method = gr.Radio(
-                    choices=["单步验证", "回合验证", "完整轨迹验证"],
-                    label="验证方法",
-                    value="单步验证"
-                )
-                
-                with gr.Row():
-                    run_validation = gr.Button("运行验证")
-                    export_results = gr.Button("导出结果")
-                
-                validation_output = gr.TextArea(label="验证结果", interactive=False)
-        
-        return {
-            "test_data": test_data,
-            "validation_method": validation_method,
-            "run_validation": run_validation,
-            "export_results": export_results,
-            "validation_output": validation_output
-        }
-
-
-def generate_reward_json(rule_data: Dict[str, Any], model_data: Dict[str, Any], validation_data: Dict[str, Any]) -> Dict[str, Any]:
-    """生成奖赏配置JSON"""
-    reward_config = {
-        "name": rule_data["reward_name"],
-        "description": rule_data["reward_description"],
-        "type": rule_data["reward_type"],
-        "range": {
-            "min": rule_data["min_reward"],
-            "max": rule_data["max_reward"]
-        },
-        "custom_rules": rule_data["custom_rules"],
-        "grader": {
-            "enabled": model_data["use_model"],
-            "type": model_data["grader_type"],
-            "config": model_data["model_config"]
-        },
-        "validation": {
-            "method": validation_data["validation_method"]
-        }
-    }
-    return reward_config
-
-def generate_reward_python(reward_config: Dict[str, Any]) -> str:
-    """根据配置生成Python奖赏函数"""
-    grader_import = ""
-    grader_init = ""
-    grader_code = ""
-    
-    if reward_config["grader"]["enabled"]:
-        grader_import = "from components.rewards.graders import GraderRegistry"
-        grader_init = f"""
-        # 初始化评分器
-        grader_class = GraderRegistry.get("{reward_config["grader"]["type"]}")
-        self.grader = grader_class()"""
-        grader_code = """
-        # 使用评分器计算奖赏
-        if hasattr(self, 'grader'):
-            reward = self.grader.grade(next_state, info.get('reference')) if info and 'reference' in info else 0.0"""
-    
-    template = f'''
-import numpy as np
-{grader_import}
-
-class {reward_config["name"]}:
-    """
-    {reward_config["description"]}
-    """
-    def __init__(self):
-        self.min_reward = {reward_config["range"]["min"]}
-        self.max_reward = {reward_config["range"]["max"]}
-        self.reward_type = "{reward_config["type"]}"
-        {grader_init}
-        
-    def calculate_reward(self, state, action, next_state, info=None):
-        """计算奖赏值"""
-        reward = 0.0
-        {grader_code}
-        
-        # 自定义规则
-{reward_config["custom_rules"]}
-        
-        # 确保奖赏在范围内
-        reward = np.clip(reward, self.min_reward, self.max_reward)
-        return reward
-        
-    def reset(self):
-        """重置奖赏函数状态"""
-        pass
-'''
-    return template

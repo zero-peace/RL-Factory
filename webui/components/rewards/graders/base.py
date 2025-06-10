@@ -6,12 +6,16 @@ class BaseGrader(ABC):
     """奖赏评分器基类"""
     
     @abstractmethod
-    def grade(self, prediction: Any, reference: Any) -> float:
+    def grade(self, extracted_answer, **kwargs) -> float:
         """评分方法
         
         Args:
-            prediction: 预测值
-            reference: 参考值
+            extracted_answer: 提取的答案
+            **kwargs: 可选参数，可能包含：
+                - data_source: 数据源
+                - solution_str: 解题答案
+                - ground_truth: 标准答案
+                - extra_info: 额外信息
             
         Returns:
             float: 评分结果（0-1之间）
@@ -23,6 +27,11 @@ class BaseGrader(ABC):
     def name(self) -> str:
         """评分器名称"""
         pass
+
+    @property
+    def required_attributes(self) -> Dict[str, Any]:
+        """评分器需要的属性"""
+        return {}
     
     @property
     @abstractmethod
@@ -46,10 +55,7 @@ class GraderRegistry:
         Returns:
             注册的评分器类
         """
-        # 创建一个实例来获取名称和描述
-        instance = grader_class()
-        name = instance.name
-        cls._registry[name] = grader_class
+        cls._registry[grader_class.name] = grader_class
         return grader_class
     
     @classmethod
@@ -73,7 +79,4 @@ class GraderRegistry:
         Returns:
             Dict[str, str]: 评分器名称和描述的字典
         """
-        return {
-            name: grader_class().description 
-            for name, grader_class in cls._registry.items()
-        }
+        return {name: grader.description for name, grader in cls._registry.items()}
