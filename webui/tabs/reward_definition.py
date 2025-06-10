@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
+import time
 
 from components.rewards.graders import GraderRegistry
 
@@ -24,7 +25,7 @@ RESPONSE_POSITIONS = ["首位", "末尾", "整体", "每个"]
 LABEL_TYPES = ["<think>", "<answer>", "<tool_call>", "自定义"]
 RULE_FORMS = ["数量", "长度", "格式", "得分"]
 
-def create_rule_definition_tab():
+def create_rule_definition_tab(rules_state: gr.State, update_state: gr.State, update_shared_rules):
     """创建规则定义标签页"""
     with gr.Column() as tab:
         # 规则列表状态
@@ -280,105 +281,169 @@ def create_rule_definition_tab():
             length_min: Optional[int], length_max: int,
             format_type: str, format_example: str,
             grader_type: Optional[str], answer_field: Optional[str],
-            rules: List[Dict], edit_state: Dict
-        ) -> Tuple[List[Dict], List[List], Dict, str, str, str, str, str]:
-            """保存规则"""
-            if not description or len(description) > 20:
-                gr.Warning("请输入有效的规则描述（不超过20字）")
-                return (
-                    rules,  # rules_state
-                    [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in rules],  # rules_list
-                    gr.update(visible=True),  # rule_edit_group
-                    description,  # rule_description
-                    position,  # response_position
-                    label_type,  # label_type
-                    custom_label,  # custom_label
-                    rule_form  # rule_form
-                )
-            
-            # 获取实际的标签值
-            label = custom_label if label_type == "自定义" else label_type
-            
-            # 验证规则形式相关的配置
-            config = {}
-            if rule_form == "数量":
-                if count_max < count_min:
-                    gr.Warning("最大数量不能小于最小数量")
+            current_rules: List[Dict], edit_state: Dict
+        ) -> Tuple[List[Dict], List[List], Dict, str, str, str, str, str, str]:
+            try:
+                # 创建新的规则列表（不修改原列表）
+                updated_rules = list(current_rules) if current_rules else []
+                
+                if not description or len(description) > 20:
+                    gr.Warning("请输入有效的规则描述（不超过20字）")
                     return (
-                        rules, [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in rules],
-                        gr.update(visible=True), description, position, label_type, custom_label, rule_form
+                        updated_rules,
+                        [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in updated_rules],
+                        gr.update(visible=True),
+                        description,
+                        position,
+                        label_type,
+                        custom_label,
+                        rule_form,
+                        ""
                     )
-                config = {"min": count_min, "max": count_max}
-            elif rule_form == "长度":
-                if length_max < (length_min or 0):
-                    gr.Warning("最大长度不能小于最小长度")
-                    return (
-                        rules, [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in rules],
-                        gr.update(visible=True), description, position, label_type, custom_label, rule_form
-                    )
-                config = {"min": length_min, "max": length_max}
-            elif rule_form == "格式":
-                is_valid, error_msg = validate_format_example(format_example, format_type)
-                if not is_valid:
-                    gr.Warning(f"格式示例无效：{error_msg}")
-                    return (
-                        rules, [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in rules],
-                        gr.update(visible=True), description, position, label_type, custom_label, rule_form
-                    )
-                config = {"type": format_type, "example": format_example}
-            else:  # 得分
-                if not grader_type:
-                    gr.Warning("请选择评分器")
-                    return (
-                        rules, [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in rules],
-                        gr.update(visible=True), description, position, label_type, custom_label, rule_form
-                    )
-                grader_class = GraderRegistry.get(grader_type)
-                instance = grader_class()
-                if instance.gt_required and not answer_field:
-                    gr.Warning("请填写答案字段")
-                    return (
-                        rules, [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in rules],
-                        gr.update(visible=True), description, position, label_type, custom_label, rule_form
-                    )
-                config = {
-                    "grader": grader_type,
-                    "answer_field": answer_field if instance.gt_required else None
+                
+                # 获取实际的标签值
+                label = custom_label if label_type == "自定义" else label_type
+                
+                # 验证规则形式相关的配置
+                config = {}
+                if rule_form == "数量":
+                    if count_max < count_min:
+                        gr.Warning("最大数量不能小于最小数量")
+                        return (
+                            updated_rules,
+                            [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in updated_rules],
+                            gr.update(visible=True),
+                            description,
+                            position,
+                            label_type,
+                            custom_label,
+                            rule_form,
+                            ""
+                        )
+                    config = {"min": count_min, "max": count_max}
+                elif rule_form == "长度":
+                    if length_max < (length_min or 0):
+                        gr.Warning("最大长度不能小于最小长度")
+                        return (
+                            updated_rules,
+                            [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in updated_rules],
+                            gr.update(visible=True),
+                            description,
+                            position,
+                            label_type,
+                            custom_label,
+                            rule_form,
+                            ""
+                        )
+                    config = {"min": length_min, "max": length_max}
+                elif rule_form == "格式":
+                    is_valid, error_msg = validate_format_example(format_example, format_type)
+                    if not is_valid:
+                        gr.Warning(f"格式示例无效：{error_msg}")
+                        return (
+                            updated_rules,
+                            [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in updated_rules],
+                            gr.update(visible=True),
+                            description,
+                            position,
+                            label_type,
+                            custom_label,
+                            rule_form,
+                            ""
+                        )
+                    config = {"type": format_type, "example": format_example}
+                else:  # 得分
+                    if not grader_type:
+                        gr.Warning("请选择评分器")
+                        return (
+                            updated_rules,
+                            [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in updated_rules],
+                            gr.update(visible=True),
+                            description,
+                            position,
+                            label_type,
+                            custom_label,
+                            rule_form,
+                            ""
+                        )
+                    grader_class = GraderRegistry.get(grader_type)
+                    instance = grader_class()
+                    if instance.gt_required and not answer_field:
+                        gr.Warning("请填写答案字段")
+                        return (
+                            updated_rules,
+                            [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in updated_rules],
+                            gr.update(visible=True),
+                            description,
+                            position,
+                            label_type,
+                            custom_label,
+                            rule_form,
+                            ""
+                        )
+                    config = {
+                        "grader": grader_type,
+                        "answer_field": answer_field if instance.gt_required else None
+                    }
+                
+                new_rule = {
+                    "description": description,
+                    "position": position,
+                    "label": label,
+                    "form": rule_form,
+                    "config": config
                 }
+                
+                print(f"Creating new rule: {new_rule}")
+                
+                # 编辑模式
+                if edit_state["active"] and edit_state["index"] is not None:
+                    updated_rules[edit_state["index"]] = new_rule
+                    edit_state["active"] = False
+                    edit_state["index"] = None
+                else:
+                    updated_rules.append(new_rule)
+                
+                print(f"Current rules after update: {updated_rules}")
+                
+                # 更新显示数据
+                display_data = [
+                    [r["description"], r["position"], r["label"], r["form"], format_rule_config(r)]
+                    for r in updated_rules
+                ]
+                
+                # 生成更新标识
+                update_id = f"update_{len(updated_rules)}_{int(time.time())}"
+                print(f"Generated update ID: {update_id}")
             
-            new_rule = {
-                "description": description,
-                "position": position,
-                "label": label,
-                "form": rule_form,
-                "config": config
-            }
+                # 更新共享规则
+                updated_rules = update_shared_rules(updated_rules)
             
-            # 编辑模式
-            if edit_state["active"] and edit_state["index"] is not None:
-                rules[edit_state["index"]] = new_rule
-                edit_state["active"] = False
-                edit_state["index"] = None
-            else:
-                rules.append(new_rule)
-            
-            # 更新显示数据
-            display_data = [
-                [r["description"], r["position"], r["label"], r["form"], format_rule_config(r)]
-                for r in rules
-            ]
-            
-            # 清空编辑区域并返回默认值
-            return (
-                rules,  # rules_state
-                display_data,  # rules_list
-                gr.update(visible=False),  # rule_edit_group
-                "",  # rule_description
-                RESPONSE_POSITIONS[0],  # response_position
-                LABEL_TYPES[0],  # label_type
-                "",  # custom_label
-                RULE_FORMS[0]  # rule_form
-            )
+                return (
+                    updated_rules,
+                    display_data,
+                    gr.update(visible=False),
+                    "",
+                    RESPONSE_POSITIONS[0],
+                    LABEL_TYPES[0],
+                    "",
+                    RULE_FORMS[0],
+                    update_id
+                )
+            except Exception as e:
+                print(f"Error in save_rule: {e}")
+                gr.Warning(f"保存规则时发生错误: {str(e)}")
+                return (
+                    current_rules,
+                    [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in current_rules],
+                    gr.update(visible=True),
+                    description,
+                    position,
+                    label_type,
+                    custom_label,
+                    rule_form,
+                    ""
+                )
         
         def select_rule(evt: gr.SelectData, rules: List[Dict]) -> Tuple[int, Dict, Dict]:
             """选择规则"""
@@ -469,30 +534,50 @@ def create_rule_definition_tab():
                 answer_field  # answer_field
             )
         
-        def delete_selected_rule(rule_index: int, rules: List[Dict]) -> Tuple[List[Dict], List[List], Dict, Dict, int]:
+        def delete_selected_rule(rule_index: int, current_rules: List[Dict]) -> Tuple[List[Dict], List[List], Dict, Dict, int, str]:
             """删除选中的规则"""
-            if rule_index is None or rule_index >= len(rules):
+            try:
+                if rule_index is None or rule_index >= len(current_rules):
+                    return (
+                        current_rules,
+                        [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in current_rules],
+                        gr.update(visible=False),
+                        gr.update(visible=False),
+                        None,
+                        ""
+                    )
+                
+                # 创建新的规则列表（不修改原列表）
+                rules = list(current_rules)
+                rules.pop(rule_index)
+                
+                display_data = [
+                    [r["description"], r["position"], r["label"], r["form"], format_rule_config(r)]
+                    for r in rules
+                ]
+                
+                update_id = f"delete_{len(rules)}_{int(time.time())}"
+                print(f"Deleted rule at index {rule_index}, remaining rules: {rules}")
+            
                 return (
-                    rules,  # rules_state
-                    [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in rules],  # rules_list
-                    gr.update(visible=False),  # edit_rule_btn
-                    gr.update(visible=False),  # delete_rule_btn
-                    None  # selected_rule_index
+                    rules,
+                    display_data,
+                    gr.update(visible=False),
+                    gr.update(visible=False),
+                    None,
+                    update_id
                 )
-            
-            updated_rules = rules[:rule_index] + rules[rule_index + 1:]
-            display_data = [
-                [r["description"], r["position"], r["label"], r["form"], format_rule_config(r)]
-                for r in updated_rules
-            ]
-            
-            return (
-                updated_rules,  # rules_state
-                display_data,  # rules_list
-                gr.update(visible=False),  # edit_rule_btn
-                gr.update(visible=False),  # delete_rule_btn
-                None  # selected_rule_index
-            )
+            except Exception as e:
+                print(f"Error in delete_selected_rule: {e}")
+                gr.Warning(f"删除规则时发生错误: {str(e)}")
+                return (
+                    current_rules,
+                    [[r["description"], r["position"], r["label"], r["form"], format_rule_config(r)] for r in current_rules],
+                    gr.update(visible=False),
+                    gr.update(visible=False),
+                    None,
+                    ""
+                )
         
         def show_format_warning(result: Tuple[bool, str]) -> None:
             """显示格式验证警告"""
@@ -579,14 +664,15 @@ def create_rule_definition_tab():
                 edit_state
             ],
             outputs=[
-                rules_state,
+                rules_state,  # 更新规则状态
                 rules_list,
                 rule_edit_group,
                 rule_description,
                 response_position,
                 label_type,
                 custom_label,
-                rule_form
+                rule_form,
+                update_state
             ]
         )
         
@@ -630,7 +716,8 @@ def create_rule_definition_tab():
                 rules_list,
                 edit_rule_btn,
                 delete_rule_btn,
-                selected_rule_index
+                selected_rule_index,
+                update_state
             ]
         )
     
@@ -657,6 +744,11 @@ def create_model_evaluation_tab():
                     placeholder="例如：query",
                     scale=2
                 )
+                field_example = gr.Textbox(
+                    label="示例值",
+                    placeholder="请输入示例值（可选）",
+                    scale=2
+                )
                 add_field_btn = gr.Button("➕ 添加字段", scale=1)
             
             # 字段列表
@@ -665,7 +757,7 @@ def create_model_evaluation_tab():
                 datatype=["str", "str"],
                 col_count=(2, "fixed"),
                 row_count=5,
-                interactive=True,
+                interactive=False,
                 visible=True
             )
             
@@ -690,25 +782,85 @@ def create_model_evaluation_tab():
             gr.Markdown("### 预览")
             preview = gr.Markdown("_在此显示预览结果_")
         
+        def update_field_example(fields_data: List[List], fields: List[Dict]) -> Tuple[List[Dict], str]:
+            """更新字段示例值并触发预览更新
+            
+            Returns:
+                Tuple[List[Dict], str]: (更新后的字段列表, 更新标记)
+            """
+            try:
+                if not isinstance(fields_data, list) or not fields_data:
+                    return fields, ""
+                
+                updated_fields = []
+                for field in fields:
+                    updated_field = field.copy()
+                    # 在fields_data中查找对应的行
+                    for row in fields_data:
+                        if len(row) >= 2 and row[0] == field["name"]:
+                            updated_field["example"] = row[1]
+                            break
+                    updated_fields.append(updated_field)
+                
+                # 返回更新后的字段列表和更新标记
+                return updated_fields, str(len(updated_fields))
+            except Exception as e:
+                print(f"Error in update_field_example: {str(e)}")
+                return fields, ""
+
+        def update_preview(prompt: str, fields: List[Dict]) -> str:
+            """更新预览"""
+            try:
+                if not prompt:
+                    return "_请输入用户提示词_"
+                
+                preview_text = prompt
+                for field in fields:
+                    placeholder = "{" + field["name"] + "}"  # 修改占位符的构造方式
+                    if placeholder in preview_text:
+                        example = field.get("example", "None")
+                        if example != "None":
+                            preview_text = preview_text.replace(placeholder, f"**{example}**")
+                        else:
+                            preview_text = preview_text.replace(placeholder, f"__{field['name']}__")
+                
+                # 添加预览标题
+                preview_text = "**预览效果：**\n" + preview_text
+                
+                # 添加字段值说明
+                field_values = "\n\n**当前字段值：**\n" + "\n".join([
+                    f"- {field['name']}: " + (f"**{field.get('example', 'None')}**" if field.get("example") != "None" else "__未设置__")
+                    for field in fields
+                ])
+                
+                return preview_text + field_values
+            except Exception as e:
+                print(f"Error in update_preview: {str(e)}")
+                return "_预览更新出错_"
+
         # 字段状态
         fields_state = gr.State([])
         selected_field_index = gr.State(None)
         
-        def add_field(name: str, fields: List[Dict]) -> Tuple[List[Dict], List[List], str, Dict]:
+        def add_field(name: str, example: str, fields: List[Dict]) -> Tuple[List[Dict], List[List], str, str, Dict]:
             """添加字段"""
             if not name:
                 gr.Warning("请输入字段名称")
-                return fields, [[f["name"], f["example"]] for f in fields], name, gr.update(visible=False)
+                return fields, [[f["name"], f.get("example", "None")] for f in fields], name, example, gr.update(visible=False)
             
             if any(f["name"] == name for f in fields):
                 gr.Warning("字段名称已存在")
-                return fields, [[f["name"], f["example"]] for f in fields], name, gr.update(visible=False)
+                return fields, [[f["name"], f.get("example", "None")] for f in fields], name, example, gr.update(visible=False)
             
-            fields.append({"name": name, "example": ""})
+            # 如果没有输入示例值，默认为"None"
+            example = example.strip() if example and example.strip() else "None"
+            fields.append({"name": name, "example": example})
+            
             return (
                 fields,  # fields_state
-                [[f["name"], f["example"]] for f in fields],  # fields_list
+                [[f["name"], f.get("example", "None")] for f in fields],  # fields_list
                 "",  # field_name
+                "",  # field_example
                 gr.update(visible=False)  # delete_field_btn
             )
         
@@ -719,45 +871,25 @@ def create_model_evaluation_tab():
         def delete_field(index: int, fields: List[Dict]) -> Tuple[List[Dict], List[List], Dict, int]:
             """删除字段"""
             if index is None or index >= len(fields):
-                return fields, [[f["name"], f["example"]] for f in fields], gr.update(visible=False), None
+                return fields, [[f["name"], f.get("example", "None")] for f in fields], gr.update(visible=False), None
             
             updated_fields = fields[:index] + fields[index + 1:]
             return (
                 updated_fields,  # fields_state
-                [[f["name"], f["example"]] for f in updated_fields],  # fields_list
+                [[f["name"], f.get("example", "None")] for f in updated_fields],  # fields_list
                 gr.update(visible=False),  # delete_field_btn
                 None  # selected_field_index
             )
         
-        def update_field_example(fields_data: List[List], fields: List[Dict]) -> List[Dict]:
-            """更新字段示例值"""
-            updated_fields = []
-            for i, (name, example) in enumerate(fields_data):
-                if i < len(fields):
-                    field = fields[i].copy()
-                    field["example"] = example
-                    updated_fields.append(field)
-            return updated_fields
-        
-        def update_preview(prompt: str, fields: List[Dict]) -> str:
-            """更新预览"""
-            if not prompt:
-                return "_请输入用户提示词_"
-            
-            preview_text = prompt
-            for field in fields:
-                if field["example"]:
-                    preview_text = preview_text.replace(f"{{{field['name']}}}", field["example"])
-                else:
-                    preview_text = preview_text.replace(f"{{{field['name']}}}", f"<{field['name']}>")
-            
-            return f"```\n{preview_text}\n```"
-        
         # 绑定事件
         add_field_btn.click(
             fn=add_field,
-            inputs=[field_name, fields_state],
-            outputs=[fields_state, fields_list, field_name, delete_field_btn]
+            inputs=[field_name, field_example, fields_state],
+            outputs=[fields_state, fields_list, field_name, field_example, delete_field_btn]
+        ).then(
+            fn=update_preview,
+            inputs=[user_prompt, fields_state],
+            outputs=[preview]
         )
         
         fields_list.select(
@@ -770,12 +902,6 @@ def create_model_evaluation_tab():
             fn=delete_field,
             inputs=[selected_field_index, fields_state],
             outputs=[fields_state, fields_list, delete_field_btn, selected_field_index]
-        )
-        
-        fields_list.change(
-            fn=update_field_example,
-            inputs=[fields_list, fields_state],
-            outputs=[fields_state]
         ).then(
             fn=update_preview,
             inputs=[user_prompt, fields_state],
@@ -790,20 +916,163 @@ def create_model_evaluation_tab():
     
     return tab
 
+def create_reward_logic_tab(rules_state: gr.State, update_state: gr.State, get_rules):
+    """创建奖赏逻辑标签页"""
+    with gr.Blocks() as tab:
+        with gr.Column():
+            gr.Markdown("### 奖赏逻辑编辑器")
+            
+            # 左侧规则列表
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("#### 可用规则")
+                    # 添加刷新按钮
+                    refresh_btn = gr.Button("🔄 刷新规则列表")
+                    rules_list = gr.Dataframe(
+                        headers=["规则描述", "规则类型", "规则形式"],
+                        datatype=["str", "str", "str"],
+                        col_count=(3, "fixed"),
+                        row_count=10,
+                        interactive=False,
+                        wrap=True,
+                        value=[[]]  # 初始化为空列表
+                    )
+                    
+                    # 添加拖拽相关的JavaScript
+                    rules_list.elem_id = "rules_list"
+                    rules_list_js = """
+                    <script>
+                        // 等待DOM加载完成
+                        window.addEventListener('load', function() {
+                            // 获取规则列表表格
+                            var rulesList = document.getElementById('rules_list');
+                            if (!rulesList) return;
+                            
+                            // 为每一行添加拖拽功能
+                            var rows = rulesList.getElementsByTagName('tr');
+                            Array.from(rows).forEach(function(row, index) {
+                                if (index === 0) return; // 跳过表头
+                                
+                                row.draggable = true;
+                                row.addEventListener('dragstart', function(e) {
+                                    var cells = row.getElementsByTagName('td');
+                                    var ruleData = {
+                                        description: cells[0].textContent,
+                                        label: cells[1].textContent,
+                                        form: cells[2].textContent
+                                    };
+                                    e.dataTransfer.setData('application/json', JSON.stringify(ruleData));
+                                });
+                            });
+                        });
+                    </script>
+                    """
+                    gr.HTML(value=rules_list_js)
+                
+                # 右侧画布区域
+                with gr.Column(scale=3):
+                    gr.Markdown("#### 规则流程图")
+                    
+                    # 添加流程图工具栏
+                    with gr.Row():
+                        add_logic_btn = gr.Button("➕ 添加逻辑节点", elem_id="add_logic_btn")
+                        reset_btn = gr.Button("🗑️ 重置画布", elem_id="reset_flow_btn")
+                    
+                    # 添加流程图画布
+                    from components.flow_editor import FlowEditor
+                    flow_editor = FlowEditor(label="流程图编辑器")
+                    
+                    # 添加按钮事件处理的JavaScript
+                    button_js = """
+                    <script>
+                        window.addEventListener('load', function() {
+                            // 添加逻辑节点按钮
+                            var addLogicBtn = document.getElementById('add_logic_btn');
+                            if (addLogicBtn) {
+                                addLogicBtn.addEventListener('click', function() {
+                                    if (window.addLogicNode) {
+                                        window.addLogicNode();
+                                    }
+                                });
+                            }
+                            
+                            // 重置画布按钮
+                            var resetBtn = document.getElementById('reset_flow_btn');
+                            if (resetBtn) {
+                                resetBtn.addEventListener('click', function() {
+                                    if (window.resetFlow) {
+                                        window.resetFlow();
+                                    }
+                                });
+                            }
+                        });
+                    </script>
+                    """
+                    gr.HTML(value=button_js)
+            
+            def update_rules_list() -> List[List]:
+                """更新规则列表显示"""
+                rules = get_rules()
+                print(f"Updating rules list with: {rules}")
+                if not rules:
+                    print("No rules found")
+                    return [[]]
+                result = [
+                    [
+                        rule["description"],
+                        rule["label"],
+                        rule["form"]
+                    ] for rule in rules
+                ]
+                print(f"Converted rules: {result}")
+                return result
+            
+            # 组件加载完成时更新规则列表
+            tab.load(
+                fn=update_rules_list,
+                outputs=[rules_list]
+            )
+            
+            # 点击刷新按钮时更新规则列表
+            refresh_btn.click(
+                fn=update_rules_list,
+                outputs=[rules_list]
+            )
+    
+    return tab
+
 def create_reward_definition_tab():
     """奖赏定义主标签页"""
     with gr.Blocks() as tab:
         gr.Markdown("# 奖赏定义")
         
+        # 创建共享状态
+        shared_rules = []  # 使用Python变量来存储规则
+        
+        def get_rules():
+            return shared_rules
+        
+        def update_shared_rules(rules: List[Dict]):
+            nonlocal shared_rules
+            shared_rules = rules
+            print(f"Shared rules updated: {shared_rules}")
+            return rules
+        
+        rules_state = gr.State(get_rules)
+        update_state = gr.State("")
+        
         # 创建子标签页
         with gr.Tabs() as subtabs:
-            with gr.TabItem("规则定义"):
-                rule_tab = create_rule_definition_tab()
+            with gr.TabItem("规则定义", id="rule_definition"):
+                rule_tab = create_rule_definition_tab(rules_state, update_state, update_shared_rules)
             
-            with gr.TabItem("模型评判"):
+            with gr.TabItem("模型评判", id="model_evaluation"):
                 model_tab = create_model_evaluation_tab()
             
-            with gr.TabItem("验证工具"):
+            with gr.TabItem("奖赏逻辑", id="reward_logic"):
+                logic_tab = create_reward_logic_tab(rules_state, update_state, get_rules)
+            
+            with gr.TabItem("验证工具", id="validation"):
                 # TODO: 实现验证工具界面
                 pass
     
