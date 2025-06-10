@@ -35,7 +35,17 @@ logger = logging.getLogger(__name__)
 
 
 def collate_fn(data_list: list[dict]) -> dict:
-    """Collate a batch of data."""
+    """
+    Collate a batch of sample dicts into batched tensors and arrays.
+
+    Args:
+        data_list: List of dicts mapping feature names to torch.Tensor or other values.
+
+    Returns:
+        Dict where tensor entries are stacked into a torch.Tensor of shape
+        (batch_size, *dims) and non-tensor entries are converted to
+        np.ndarray of dtype object with shape (batch_size,).
+    """
     tensors = defaultdict(list)
     non_tensors = defaultdict(list)
 
@@ -57,7 +67,19 @@ def collate_fn(data_list: list[dict]) -> dict:
 
 class RLHFDataset(Dataset):
     """
-    We assume the dataset contains a column that contains prompts and other information
+    Load and preprocess RLHF data from Parquet files.
+
+    - Caches files locally.
+    - Reads into a HuggingFace Dataset and tokenizes prompts.
+    - Optionally handles images/videos via a ProcessorMixin.
+    - Filters prompts over a max length.
+    - Supports resuming from checkpoints.
+
+    Args:
+        data_files (str or list): Path(s) to Parquet file(s).
+        tokenizer (PreTrainedTokenizer): For the tokenization of text to token IDs.
+        config (DictConfig): Options like cache_dir, prompt_key, max_prompt_length, truncation, etc.
+        processor (ProcessorMixin, optional): Multimodal preprocessor for images/videos.
     """
 
     def __init__(
@@ -65,12 +87,11 @@ class RLHFDataset(Dataset):
         data_files: Union[str, List[str]],
         tokenizer: PreTrainedTokenizer,
         config: DictConfig,
-        env_object, 
         processor: Optional[ProcessorMixin] = None,
     ):
         if not isinstance(data_files, (List, ListConfig)):
             data_files = [data_files]
-        self.env_object = env_object
+
         self.data_files = copy.deepcopy(data_files)
         self.original_data_files = copy.deepcopy(data_files)  # use for resume
         self.tokenizer = tokenizer
@@ -89,6 +110,7 @@ class RLHFDataset(Dataset):
 
         self.num_workers = config.get("filter_overlong_prompts_workers", max(1, os.cpu_count() // 4))
         self.num_workers = min(self.num_workers, os.cpu_count())
+        self.use_shm = config.get('use_shm', False)
         self.chat_template_func = config.get("chat_template_func", None)
         self.need_tools_kwargs = config.get("need_tools_kwargs", False)
         self.filter_prompts = config.get("filter_prompts", True)
@@ -101,7 +123,7 @@ class RLHFDataset(Dataset):
 
         data_files = self.data_files if not use_origin_parquet else self.original_data_files
         for i, parquet_file in enumerate(data_files):
-            self.data_files[i] = copy_to_local(src=parquet_file, cache_dir=self.cache_dir)
+            self.data_files[i] = copy_to_local(src=parquet_file, cache_dir=self.cache_dir, use_shm=self.use_shm)
 
     def _read_files_and_tokenize(self):
         dataframes = []
@@ -194,9 +216,9 @@ class RLHFDataset(Dataset):
 
             # second_per_grid_ts isn't used for training, just for mrope
             row_dict["multi_modal_inputs"].pop("second_per_grid_ts", None)
+
         else:
-            raw_prompt = self.env_object.tool_manager.get_prompt(messages, self.tokenizer, mode='initial', add_generation_prompt=True)
-            # raw_prompt = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+            raw_prompt = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
             model_inputs = self.tokenizer(raw_prompt, return_tensors="pt", add_special_tokens=False)
             input_ids = model_inputs.pop("input_ids")
             attention_mask = model_inputs.pop("attention_mask")
@@ -248,10 +270,10 @@ class RLHFDataset(Dataset):
         # encode prompts without chat template
         if self.return_raw_chat:
             row_dict["raw_prompt"] = messages
-        
+
         # get prompts with chat template
         if self.return_full_prompt:
-            row_dict["full_prompts"] = raw_prompt # array of strings
+            row_dict["full_prompts"] = raw_prompt  # array of strings
 
         # add index for each prompt
         index = row_dict.get("extra_info", {}).get("index", 0)
