@@ -11,8 +11,8 @@ from verl.utils.torch_functional import tokenize_and_postprocess_data
 
 class Env(ABC):
     def __init__(self, config, centralized_actor=None):
-        tool_manager_name = config.get('tool_manager', 'qwen3')
-        
+        tool_manager_name = config.get('tool_manage
+                                       r', 'qwen3')
         # 检查是否使用集中式工具管理器
         if tool_manager_name.startswith('centralized_'):
             if centralized_actor is None:
@@ -23,8 +23,15 @@ class Env(ABC):
             )
         else:
             # 分布式模式，保持原有逻辑
+            if not tool_manager_name:
+            model_type = config.get('model_type', 'llama3')
+            if 'qwen3' in model_type:
+                tool_manager_name = 'qwen3'
+            elif 'qwen2' in model_type:
+                tool_manager_name = 'qwen2_5'
+            elif'llama' in model_type:
+                tool_manager_name = 'llama3'                     
             self.tool_manager = TOOL_MANAGER_REGISTRY[tool_manager_name](verl_config=config)
-            
         self.max_prompt_length = config.get('max_prompt_length', 2048)
         self.use_verify_tool = False
         self.use_process_reward = config.get('use_process_reward', False)
