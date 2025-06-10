@@ -265,12 +265,6 @@ class ToolUtils:
 
         response_token = torch.tensor(input_ids_list, dtype=torch.int64)[:,:max_len]
         response_loss_mask = torch.tensor(loss_mask_list, dtype=torch.float32)
-        
-        # with open('response.txt','a') as f:
-        #     f.write(str(response_token.tolist()))
-        # with open('pad_id.txt','a') as f:
-        #     f.write(str(self.pad_token_id))
-        
         response_attention_mask = (response_token != self.pad_token_id).long()
 
         # get the max length of the process rewards
