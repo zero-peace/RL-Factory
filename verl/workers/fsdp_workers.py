@@ -119,7 +119,12 @@ class ActorRolloutRefWorker(Worker):
 
         # 初始化集中式工具管理器Actor句柄
         self.centralized_tool_actor = None
-        if hasattr(self.config, 'env') and self.config.env.get('tool_manager', '').startswith('centralized_'):
+        
+        tool_manager_name = self.config.env.get('tool_manager', '')
+        if not tool_manager_name:
+            tool_manager_name = "adaptive"
+
+        if hasattr(self.config, 'env') and tool_manager_name.startswith('centralized_'):
             self._init_centralized_tool_actor()
 
         self._is_offload_param = False
