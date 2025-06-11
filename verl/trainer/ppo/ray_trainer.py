@@ -74,6 +74,7 @@ class Role(Enum):
     RefPolicy = 4
     RewardModel = 5
     ActorRolloutRef = 6
+    RewardRolloutRef = 7
 
 
 @dataclass
@@ -95,7 +96,7 @@ class ResourcePoolManager:
             resource_pool = RayResourcePool(process_on_nodes=process_on_nodes, use_gpu=True, max_colocate_count=1, name_prefix=resource_pool_name)
             self.resource_pool_dict[resource_pool_name] = resource_pool
 
-        self._check_resource_available()
+        # self._check_resource_available()
 
     def get_resource_pool(self, role: Role) -> RayResourcePool:
         """Get the resource pool of the worker_cls"""
@@ -314,6 +315,7 @@ class RayPPOTrainer:
         self.resource_pool_manager = resource_pool_manager
         self.use_reference_policy = Role.RefPolicy in role_worker_mapping
         self.use_rm = Role.RewardModel in role_worker_mapping
+        self.use_reward_rollout = Role.RewardRolloutRef in role_worker_mapping
         self.ray_worker_group_cls = ray_worker_group_cls
         self.device_name = device_name
         self.validation_generations_logger = ValidationGenerationsLogger()
@@ -719,6 +721,13 @@ class RayPPOTrainer:
             resource_pool = self.resource_pool_manager.get_resource_pool(Role.Critic)
             critic_cls = RayClassWithInitArgs(cls=self.role_worker_mapping[Role.Critic], config=self.config.critic)
             self.resource_pool_to_cls[resource_pool]["critic"] = critic_cls
+        
+        if self.use_reward_rollout:
+            resource_pool = self.resource_pool_manager.get_resource_pool(Role.RewardRolloutRef)
+            reward_rollout_cls = RayClassWithInitArgs(cls=self.role_worker_mapping[Role.RewardRolloutRef],
+                                                      config=self.config.reward_rollout,
+                                                      role='reward_rollout')
+            self.resource_pool_to_cls[resource_pool]['reward_rollout'] = reward_rollout_cls
 
         # create reference policy if needed
         if self.use_reference_policy:
@@ -748,7 +757,7 @@ class RayPPOTrainer:
             wg_dict = self.ray_worker_group_cls(resource_pool=resource_pool, ray_cls_with_init=worker_dict_cls, device_name=self.device_name, **wg_kwargs)
             spawn_wg = wg_dict.spawn(prefix_set=class_dict.keys())
             all_wg.update(spawn_wg)
-
+        
         if self.use_critic:
             self.critic_wg = all_wg["critic"]
             self.critic_wg.init_model()
@@ -775,6 +784,29 @@ class RayPPOTrainer:
                 config=self.config,
                 worker_group=self.actor_rollout_wg,
             )
+        
+        if self.use_reward_rollout:
+            print(f"Preparing to initialize reward_rollout_wg. Keys in all_wg: {all_wg.keys()}")
+            try:
+                self.reward_rollout_wg = all_wg['reward_rollout']
+                print(f"Starting reward_rollout_wg.init_model()")
+                self.reward_rollout_wg.init_model()
+                print(f"Finished reward_rollout_wg.init_model() successfully")
+            except Exception as e:
+                import traceback
+                print(f"Error initializing reward_rollout_wg: {e}")
+                print(traceback.format_exc())
+                raise
+            
+            self.reward_fn.set_reward_rollout_wg(self.reward_rollout_wg)
+            self.val_reward_fn.set_reward_rollout_wg(self.reward_rollout_wg)
+
+            from verl.utils.fs import copy_to_local
+            from verl.utils import hf_tokenizer
+            reward_local_path = copy_to_local(self.config.reward_rollout.rollout.model_name)
+            reward_tokenizer = hf_tokenizer(reward_local_path, trust_remote_code=False)
+            self.reward_fn.set_reward_tokenizer(reward_tokenizer)
+            self.val_reward_fn.set_reward_tokenizer(reward_tokenizer)
 
     def _save_checkpoint(self):
         # path: given_path + `/global_step_{global_steps}` + `/actor`
@@ -938,14 +970,17 @@ class RayPPOTrainer:
                 with _timer("step", timing_raw):
                     # generate a batch
                     with _timer("gen", timing_raw):
-                        if not self.async_rollout_mode:
-                            gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
+                        if self.config.actor_rollout_ref.rollout.max_turns is None:
+                            if not self.async_rollout_mode:
+                                gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
+                            else:
+                                self.async_rollout_manager.wake_up()
+                                gen_batch_output = self.async_rollout_manager.generate_sequences(gen_batch)
+                                self.async_rollout_manager.sleep()
+                            timing_raw.update(gen_batch_output.meta_info["timing"])
+                            gen_batch_output.meta_info.pop("timing", None)
                         else:
-                            self.async_rollout_manager.wake_up()
-                            gen_batch_output = self.async_rollout_manager.generate_sequences(gen_batch)
-                            self.async_rollout_manager.sleep()
-                        timing_raw.update(gen_batch_output.meta_info["timing"])
-                        gen_batch_output.meta_info.pop("timing", None)
+                            gen_batch_output = self.actor_rollout_wg.generate_sequences_loop(gen_batch)
 
                     if self.config.algorithm.adv_estimator == AdvantageEstimator.REMAX:
                         with _timer("gen_max", timing_raw):

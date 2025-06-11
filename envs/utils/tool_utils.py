@@ -44,6 +44,7 @@ class ToolUtils:
         # init loop responses token
         if self.loop_cnt == 0:
             self.batch_size = output.batch.batch_size[0]
+            self.tool_use = [[] for _ in range(self.batch_size)]
             self.loop_responses_token = [[] for _ in range(self.batch_size)]
             self.end_flags = [False for _ in range(self.batch_size)]
             self.init_prompt_token = output.batch.get('prompts')
@@ -60,15 +61,36 @@ class ToolUtils:
 
         responses = output.batch.get('responses')
 
+        process_response = []
+        for idx, batch_idx in enumerate(batch_idxs):
+            response_token = responses[idx]
+            response_token_list = response_token[response_token != self.pad_token_id].tolist()
+            if self.env_object.use_process_reward:
+            # assure last token is stop token （add or change）
+                if response_token_list[-1] != self.stop_id:
+                    if len(response_token_list) != self.config_response_length:
+                        response_token_list.append(self.stop_id)
+                    else:
+                        response_token_list[-1] = self.stop_id
+            self.loop_responses_token[batch_idx].append(response_token_list)
+            process_response.append(response_token_list)
+        
         # decode responses for env step (detect tool call)
         responses_str = self.tokenizer.batch_decode(
-            output.batch.get('responses'),
+            process_response,
             skip_special_tokens=False,
         )
-        responses_str = [response.replace(self.tokenizer.pad_token, '') for response in responses_str]
+
         infos_str, dones, _, _ = self.env_object.step(
             responses=responses_str, tokenizer=self.tokenizer
         )
+        
+        #if not use_process_reward will be 0
+        if self.env_object.use_process_reward:
+            step_scores = self.env_object.get_step_reward(responses=responses_str)
+        else:
+            step_scores = [0] * len(responses_str)
+        
         # encode infos for next prompt
         info_tokens = self.tokenizer(infos_str).input_ids
         next_prompt_token = []
@@ -80,6 +102,8 @@ class ToolUtils:
                 response_token = responses[idx]
                 response_token_list = response_token[response_token != self.pad_token_id].tolist()
                 self.loop_responses_token[batch_idx].append(response_token_list)
+                # get process reward
+                self.tool_use[batch_idx].append(step_scores[idx])
 
             # 如果done了，设置end_flag
             if dones[idx]:
@@ -135,7 +159,7 @@ class ToolUtils:
             self.batch_size = output.batch.batch_size[0]
             self.loop_responses_token = [[] for _ in range(self.batch_size)]
             self.init_prompt_token = output.batch.get('prompts')
-            self.tool_use= [[] for _ in range(self.batch_size)]
+            self.tool_use = [[] for _ in range(self.batch_size)]
             prompt_length = self.init_prompt_token.shape[-1]
             self.init_attention_mask = output.batch.get('attention_mask')[:,:prompt_length]  
 
