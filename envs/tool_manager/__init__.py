@@ -5,7 +5,7 @@ from .qwen2_5_manager import Qwen25Manager
 from .centralized.centralized_qwen3_manager import CentralizedQwenManager
 
 
-__all__ = ['ConfigManager', 'QwenManager', 'Qwen25Manager','Llama3Manager','CentralizedQwenManager']
+__all__ = ['ConfigManager', 'QwenManager', 'Qwen25Manager','Llama3Manager', 'CentralizedQwenManager']
 
 TOOL_MANAGER_REGISTRY = {
     'config': ConfigManager,

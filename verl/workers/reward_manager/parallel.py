@@ -16,8 +16,10 @@ import torch
 import asyncio
 from verl import DataProto
 from envs.base import Env
+from verl.workers.reward_manager import register
 
 
+@register("parallel")
 class AsyncRewardManager:
     """The reward manager with async processing.
     """

@@ -12,7 +12,7 @@ from verl.utils.torch_functional import tokenize_and_postprocess_data
 class Env(ABC):
     def __init__(self, config, centralized_actor=None):
         tool_manager_name = config.get('tool_manager')
-        # 检查是否指定工具管理器，如果没有采用自适应模式
+        # 检查是否指定工具管理器，如果没有采用自适应模式Add commentMore actions
         if not tool_manager_name:
             tool_manager_name = "adaptive"
         # 检查是否使用集中式工具管理器
@@ -36,8 +36,9 @@ class Env(ABC):
                 else:
                     tool_manager_name = model_type
                     raise ValueError(f"'{tool_manager_name}' 需要进行适配，请添加一个对应的tool_manager")
-                                     
+            
             self.tool_manager = TOOL_MANAGER_REGISTRY[tool_manager_name](verl_config=config)
+        
         self.max_prompt_length = config.get('max_prompt_length', 2048)
         self.use_verify_tool = False
         self.use_process_reward = config.get('use_process_reward', False)
