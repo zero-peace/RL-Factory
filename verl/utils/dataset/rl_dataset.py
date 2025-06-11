@@ -87,11 +87,12 @@ class RLHFDataset(Dataset):
         data_files: Union[str, List[str]],
         tokenizer: PreTrainedTokenizer,
         config: DictConfig,
+        env_object,
         processor: Optional[ProcessorMixin] = None,
     ):
         if not isinstance(data_files, (List, ListConfig)):
             data_files = [data_files]
-
+        self.env_object = env_object
         self.data_files = copy.deepcopy(data_files)
         self.original_data_files = copy.deepcopy(data_files)  # use for resume
         self.tokenizer = tokenizer
@@ -218,7 +219,8 @@ class RLHFDataset(Dataset):
             row_dict["multi_modal_inputs"].pop("second_per_grid_ts", None)
 
         else:
-            raw_prompt = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+            raw_prompt = self.env_object.tool_manager.get_prompt(messages, self.tokenizer, mode='initial', add_generation_prompt=True)
+            # raw_prompt = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
             model_inputs = self.tokenizer(raw_prompt, return_tensors="pt", add_special_tokens=False)
             input_ids = model_inputs.pop("input_ids")
             attention_mask = model_inputs.pop("attention_mask")
