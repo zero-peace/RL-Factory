@@ -83,6 +83,9 @@ class TaskRunner:
         centralized_tool_actor = None
         tool_manager_name = config.actor_rollout_ref.env.get('tool_manager', 'qwen3')
         import ray
+        # 检查是否指定工具管理器，如果没有采用自适应模式Add commentMore actions
+        if not tool_manager_name:
+            tool_manager_name = "adaptive"
         if tool_manager_name.startswith('centralized_'):
             from envs.tool_manager.centralized.centralized_qwen3_manager import CentralizedToolActor
             
