@@ -23,7 +23,7 @@ class Env(ABC):
         else:
             # 分布式模式，保持原有逻辑
             if not tool_manager_name:
-            model_type = config.get('model_type', 'llama3')
+                model_type = config.get('model_type', 'llama3')
             if 'qwen3' in model_type:
                 tool_manager_name = 'qwen3'
             elif 'qwen2' in model_type:
