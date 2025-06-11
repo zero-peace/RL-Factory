@@ -2,7 +2,7 @@ set -e -x
 
 export MODEL_PATH=/your/path/to/huggingface.co/Qwen/Qwen3-4B
 export REWARD_MODEL_PATH=/your/path/to/huggingface.co/Qwen/QwQ-32B
-export RESULT_DIR=/your/path/to/results/rl_factory/qwen3_8b_test_0611
+export RESULT_DIR=/your/path/to/results/rl_factory/your_result_dir
 
 python3 -m verl.trainer.main_ppo\
     algorithm.adv_estimator=grpo\
@@ -24,7 +24,7 @@ python3 -m verl.trainer.main_ppo\
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=True\
     actor_rollout_ref.actor.state_masking=True\
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=16\
-    actor_rollout_ref.rollout.tensor_model_parallel_size=2\
+    actor_rollout_ref.rollout.tensor_model_parallel_size=1\
     actor_rollout_ref.rollout.name=vllm\
     actor_rollout_ref.rollout.gpu_memory_utilization=0.75\
     actor_rollout_ref.rollout.n=4\
@@ -33,13 +33,13 @@ python3 -m verl.trainer.main_ppo\
     actor_rollout_ref.ref.fsdp_config.param_offload=False\
     actor_rollout_ref.rollout.enforce_eager=False\
     actor_rollout_ref.rollout.free_cache_engine=False\
-    actor_rollout_ref.env.name=reward_rollout\
+    actor_rollout_ref.env.name=search\
     actor_rollout_ref.env.mcp_mode=stdio\
     actor_rollout_ref.env.tool_manager=qwen3\
     actor_rollout_ref.env.enable_thinking=False\
     actor_rollout_ref.env.config_path=envs/configs/mcp_tools.pydata\
     actor_rollout_ref.env.use_process_reward=False\
-    reward_rollout.if_use_reward_rollout=True\
+    reward_rollout.if_use_reward_rollout=False\
     reward_rollout.rollout.tensor_model_parallel_size=4\
     reward_rollout.rollout.gpu_memory_utilization=0.65\
     reward_rollout.rollout.model_name=$REWARD_MODEL_PATH\
