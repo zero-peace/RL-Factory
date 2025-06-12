@@ -56,7 +56,6 @@ python3 -m verl.trainer.main_ppo\
     trainer.val_before_train=False\
     trainer.default_local_dir=$RESULT_DIR\
     trainer.default_hdfs_dir=null\
-    +trainer.use_process_reward=True\
     trainer.save_freq=20\
     trainer.test_freq=10\
     trainer.total_epochs=5 $@ 2>&1 | tee grpo.log
