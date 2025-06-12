@@ -168,7 +168,10 @@ class AsyncRewardManager:
             else:
                 return data.batch["rm_scores"]
 
-         #if use process reward
+        if self.env_object.use_verify_tool:
+            data = self._get_verified_results(data)
+        
+        #if use process reward
         self.use_process_reward = self.env_object.use_process_reward
 
         #获取step_mask
