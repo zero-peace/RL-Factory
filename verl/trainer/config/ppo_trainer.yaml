@@ -394,6 +394,8 @@ actor_rollout_ref:
 
     stop: ["<|im_end|>",]
 
+    tool_response_length: 16384
+
     # Extra inference engine arguments (vllm, sglang).
     engine_kwargs:
 

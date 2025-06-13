@@ -15,7 +15,7 @@ class ToolUtils:
         self.stop_id = self.tokenizer.encode(config.stop[0], add_special_tokens=False)[0]
         self.max_turns = config.max_turns
         self.max_prompt_length = config.prompt_length
-
+        self.max_tool_response_length = config.tool_response_length
         
         pad_token_id = meta_info.get('pad_token_id')
         if pad_token_id is not None:
@@ -92,7 +92,7 @@ class ToolUtils:
             step_scores = [0] * len(responses_str)
         
         # encode infos for next prompt
-        info_tokens = self.tokenizer(infos_str).input_ids
+        info_tokens = self.tokenizer(infos_str, truncation=True, max_length=self.max_tool_response_length).input_ids
         next_prompt_token = []
         next_prompt_length = []
         next_sample_idx = []
@@ -204,7 +204,7 @@ class ToolUtils:
             step_scores = [0] * len(responses_str)
 
         # encode infos for next prompt
-        info_tokens = self.tokenizer(infos_str).input_ids
+        info_tokens = self.tokenizer(infos_str, truncation=True, max_length=self.max_tool_response_length).input_ids
         next_prompt_token = []
         next_prompt_length = []
         next_sample_idx = []
