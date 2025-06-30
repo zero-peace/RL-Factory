@@ -4,7 +4,7 @@ from mcp.server.fastmcp import FastMCP  # 假设您已有这个基础库
 mcp = FastMCP("LocalServer")
 
 @mcp.tool()
-def query_rag(query: str, topk: int = 3) -> str:
+def query_rag(query: str, topk: int = 3):
     """MCP RAG Query Tool (Synchronous Version)
     
     Args:

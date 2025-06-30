@@ -100,10 +100,8 @@ class TaskRunner:
                     max_concurrency=config.actor_rollout_ref.env.get('max_concurrency', 10)
                 ).remote(config.actor_rollout_ref.env)
         
-        config_path = os.path.join(local_path, "config.json")
-        with open(config_path, "r", encoding="utf-8") as f:
-            model_config = json.load(f)
-        config.actor_rollout_ref.env.model_type = model_config.get("model_type", "unknown")
+        model_config = AutoConfig.from_pretrained(local_path)
+        config.actor_rollout_ref.env.model_type = getattr(model_config, "model_type", "unknown")
 
         env_object = TOOL_ENV_REGISTRY[config.actor_rollout_ref.env.name](
             config=config.actor_rollout_ref.env,
