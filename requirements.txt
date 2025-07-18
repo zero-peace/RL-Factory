@@ -24,3 +24,5 @@ uvicorn
 fastapi
 qwen-agent
 mcp
+cachebox
+orjson
