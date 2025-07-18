@@ -273,13 +273,13 @@ class MCPManager:
             client_id = register_client_id
             _manager = manager_instance  # 在类中保存manager实例的引用
 
-            def call(self, params: Union[str, dict], **kwargs) -> str:
+            async def call(self, params: Union[str, dict], **kwargs) -> str:
                 tool_args = json.loads(params)
                 # 使用保存的manager实例而不是获取新的单例
                 client = self._manager.clients[self.client_id]
-                future = asyncio.run_coroutine_threadsafe(client.execute_function(tool_name, tool_args), self._manager.loop)
+                # future = asyncio.run_coroutine_threadsafe(client.execute_function(tool_name, tool_args), self._manager.loop)
                 try:
-                    result = future.result()
+                    result = await client.execute_function(tool_name, tool_args)
                     return result
                 except Exception as e:
                     logger.info(f'Failed in executing MCP tool: {e}')
