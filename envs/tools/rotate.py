@@ -19,7 +19,7 @@ def rotate(degree: int, img_base64: str) -> str:
     Returns:
         str: The Base64 encoded string of the rotated image.
     """
-    print(f"================= Calling image_rotate tool ==================\n\n\n\n\n\n\n\n\n")
+    print(f"================= Calling image_rotate tool ==================")
     print(f"Received parameters: degree={degree}, img_base64 length={len(img_base64) if img_base64 else 0}")
 
     if img_base64 is None:
