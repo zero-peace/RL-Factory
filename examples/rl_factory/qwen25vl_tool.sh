@@ -15,6 +15,7 @@ Multiple=2
 Val_Multiple=2
 MINI=2
 
+# modified vlm tools
 python3 -m verl.trainer.main_ppo\
     algorithm.adv_estimator=grpo\
     trainer.default_local_dir="<PATH>"\

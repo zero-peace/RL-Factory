@@ -4,6 +4,7 @@ export MODEL_PATH=/your/path/to/huggingface.co/Qwen/Qwen3-4B
 export REWARD_MODEL_PATH=/your/path/to/huggingface.co/Qwen/QwQ-32B
 export RESULT_DIR=/your/path/to/results/rl_factory/your_result_dir
 
+# MM support
 python3 -m verl.trainer.main_ppo\
     algorithm.adv_estimator=grpo\
     data.train_files=data/nq_search/train.parquet\

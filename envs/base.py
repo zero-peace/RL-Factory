@@ -12,7 +12,8 @@ from verl.utils.torch_functional import tokenize_and_postprocess_data
 class Env(ABC):
     def __init__(self, config, centralized_actor=None):
         tool_manager_name = config.get('tool_manager')
-        # 检查是否指定工具管理器，如果没有采用自适应模式Add commentMore actions
+        # 检查是否指定工具管理器
+        # 如果没有采用自适应模式Add commentMore actions
         if not tool_manager_name:
             tool_manager_name = "adaptive"
         # 检查是否使用集中式工具管理器
@@ -59,6 +60,7 @@ class Env(ABC):
         valid_prompt_ids = prompt_ids[-valid_prompt_length:]
 
         response_ids = data_item.batch['responses']
+
         valid_response_length = data_item.batch['attention_mask'][prompt_length:].sum()
         valid_response_ids = response_ids[:valid_response_length]
 
@@ -117,6 +119,7 @@ class Env(ABC):
         
         return next_obs, dones, valid_action, is_tool
     
+
 
     def compute_score(self, reward_rollout_wg, reward_tokenizer, tokenizer, data: DataProto, if_val=False, use_process_reward=False):
         if reward_rollout_wg is not None:
