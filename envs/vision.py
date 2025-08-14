@@ -5,6 +5,7 @@ import torch
 import sys
 from .base import Env
 
+# new vision environment
 class VisionEnv(Env):
     def __init__(self, config, centralized_actor=None):
         super().__init__(config, centralized_actor)

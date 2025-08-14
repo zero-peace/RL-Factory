@@ -11,12 +11,12 @@ class RewardRolloutEnv(Env):
 
     def _get_single_prompt_str(self, data_source, solution_str, ground_truth, extra_info, reward_tokenizer):
         system_content = """
-You are the assistant to an intelligent search helper, responsible for evaluating the quality of search results. These evaluations will be used to adjust search queries and to better respond to users using the relevant information obtained from searches.
-Below are the outputs from a fine-tuned LLM and the corresponding ground truth labels. The model outputs are enclosed in <output></output> tags, while the ground truth labels are enclosed in <gt></gt> tags. Please assess the quality of the model's output, assign a score, and present the score within <score></score> tags.
+        You are the assistant to an intelligent search helper, responsible for evaluating the quality of search results. These evaluations will be used to adjust search queries and to better respond to users using the relevant information obtained from searches.
+        Below are the outputs from a fine-tuned LLM and the corresponding ground truth labels. The model outputs are enclosed in <output></output> tags, while the ground truth labels are enclosed in <gt></gt> tags. Please assess the quality of the model's output, assign a score, and present the score within <score></score> tags.
 """
         user_content = """
-Model outputs: <output>{}</output> 
-Ground Truth: <gt>{}</gt>
+        Model outputs: <output>{}</output> 
+        Ground Truth: <gt>{}</gt>
 """
         # extract only the answer for the reward judge model
         solution_str = self._extract_answer(solution_str)
@@ -42,17 +42,19 @@ Ground Truth: <gt>{}</gt>
         else:
             return 0.0
     
+
     def _extract_answer(self, input_str) -> str:
         start_tag = "<answer>" # for default answer tags
         end_tag = "</answer>"
         extracted_strings = ""
         start_index = input_str.find(start_tag)
+
         while start_index != -1:
             end_index = input_str.find(end_tag, start_index)
             if end_index != -1:
                 extracted_str = input_str[start_index + len(start_tag):end_index]
                 extracted_strings += extracted_str + "\n"
                 start_index = input_str.find(start_tag, end_index)
-            else:
+            else: 
                 break
         return extracted_strings

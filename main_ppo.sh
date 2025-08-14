@@ -9,6 +9,7 @@ export TRAIN_DATA='your/path/to/data/hotpot/train.parquet'
 export TEST_DATA='your/path/to/data/hotpot/test.parquet'
 # export VLLM_ATTENTION_BACKEND=XFORMERS
 
+# mm support
 python3 -m verl.trainer.main_ppo\
     algorithm.adv_estimator=gae\
     data.train_files=$TRAIN_DATA\
