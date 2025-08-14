@@ -64,7 +64,7 @@
     from .base import Env as BaseEnv
     from .search import SearchEnv
 
-    __all__ = ['BaseEnv', 'SearchEnv','ss']
+    __all__ = ['BaseEnv', 'SearchEnv','...']
 
     TOOL_ENV_REGISTRY = {
         'base': BaseEnv,
