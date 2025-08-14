@@ -21,8 +21,9 @@ import copy
 import logging
 import os
 import pickle
+from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Callable, Optional, Union, Any
 
 import numpy as np
 import pandas as pd
@@ -769,9 +770,57 @@ class DataProto:
         self.batch = self.batch[indices]
         self.non_tensor_batch = {key: val[indices_np] for key, val in self.non_tensor_batch.items()}
 
+
+
+
+    # def repeat(self, repeat_times=2, interleave=True):
+    #     """
+    #     Repeat the batch data a specified number of times.
+
+    #     Args:
+    #         repeat_times (int): Number of times to repeat the data.
+    #         interleave (bool): Whether to interleave the repeated data.
+
+    #     Returns:
+    #         DataProto: A new DataProto with repeated data.
+    #     """
+    #     if self.batch is not None:
+    #         if interleave:
+    #             # Interleave the data
+    #             repeated_tensors = {
+    #                 key: tensor.repeat_interleave(repeat_times, dim=0) for key, tensor in self.batch.items()
+    #             }
+    #         else:
+    #             # Stack the data
+    #             repeated_tensors = {
+    #                 key: tensor.unsqueeze(0).expand(repeat_times, *tensor.shape).reshape(-1, *tensor.shape[1:])
+    #                 for key, tensor in self.batch.items()
+    #             }
+
+    #         repeated_batch = TensorDict(
+    #             source=repeated_tensors,
+    #             batch_size=(self.batch.batch_size[0] * repeat_times,),
+    #         )
+    #     else:
+    #         repeated_batch = None
+
+    #     repeated_non_tensor_batch = {}
+    #     for key, val in self.non_tensor_batch.items():
+    #         if interleave:
+    #             repeated_non_tensor_batch[key] = np.repeat(val, repeat_times, axis=0)
+    #         else:
+    #             repeated_non_tensor_batch[key] = np.tile(val, (repeat_times,) + (1,) * (val.ndim - 1))
+
+    #     return type(self)(
+    #         batch=repeated_batch,
+    #         non_tensor_batch=repeated_non_tensor_batch,
+    #         meta_info=self.meta_info,
+    #     )
+
+
     def repeat(self, repeat_times=2, interleave=True):
         """
-        Repeat the batch data a specified number of times.
+        Repeat the batch data a specified number of times with deep copy guarantee.
 
         Args:
             repeat_times (int): Number of times to repeat the data.
@@ -780,37 +829,40 @@ class DataProto:
         Returns:
             DataProto: A new DataProto with repeated data.
         """
+        # Handle tensor batch
         if self.batch is not None:
-            if interleave:
-                # Interleave the data
-                repeated_tensors = {
-                    key: tensor.repeat_interleave(repeat_times, dim=0) for key, tensor in self.batch.items()
-                }
-            else:
-                # Stack the data
-                repeated_tensors = {
-                    key: tensor.unsqueeze(0).expand(repeat_times, *tensor.shape).reshape(-1, *tensor.shape[1:])
-                    for key, tensor in self.batch.items()
-                }
+            repeated_tensors = {}
+            for key, tensor in self.batch.items():
+                if interleave:
+                    # 使用深拷贝的交错重复
+                    repeated_tensors[key] = tensor.clone().repeat_interleave(repeat_times, dim=0)
+                else:
+                    # 使用深拷贝的非交错重复
+                    repeated_tensors[key] = torch.cat([tensor.clone()] * repeat_times, dim=0)
 
             repeated_batch = TensorDict(
                 source=repeated_tensors,
                 batch_size=(self.batch.batch_size[0] * repeat_times,),
+                device=self.batch.device,
             )
         else:
             repeated_batch = None
 
+        # Handle non-tensor batch with deep copy
         repeated_non_tensor_batch = {}
         for key, val in self.non_tensor_batch.items():
             if interleave:
-                repeated_non_tensor_batch[key] = np.repeat(val, repeat_times, axis=0)
+                repeated_non_tensor_batch[key] = _repeat_interleave(val, repeat_times)
             else:
-                repeated_non_tensor_batch[key] = np.tile(val, (repeat_times,) + (1,) * (val.ndim - 1))
+                repeated_non_tensor_batch[key] = _repeat_tile(val, repeat_times)
+
+        # Deep copy meta_info to ensure complete isolation
+        repeated_meta_info = deepcopy(self.meta_info)
 
         return type(self)(
             batch=repeated_batch,
             non_tensor_batch=repeated_non_tensor_batch,
-            meta_info=self.meta_info,
+            meta_info=repeated_meta_info,
         )
 
     def unfold_column_chunks(self, n_split: int, split_keys: Optional[list[str]] = None):
@@ -993,3 +1045,82 @@ def broadcast_data_proto(data: DataProto, process_group, group_src: int):
     meta_info_list = [data.meta_info]
     torch.distributed.broadcast_object_list(meta_info_list, group=process_group, group_src=group_src)
     data.meta_info = meta_info_list[0]
+
+def _deep_copy_value(val):
+    """深拷贝各种类型的值，特别处理PIL.Image等特殊对象"""
+    try:
+        # 检查是否是PIL.Image或其他有copy方法的对象
+        if hasattr(val, 'copy') and hasattr(val, 'mode'):  # PIL.Image特征
+            return val.copy()
+        elif isinstance(val, list):
+            # 处理列表，递归深拷贝每个元素
+            return [_deep_copy_value(item) for item in val]
+        elif isinstance(val, dict):
+            # 处理字典，递归深拷贝每个值
+            return {key: _deep_copy_value(value) for key, value in val.items()}
+        elif isinstance(val, tuple):
+            # 处理元组
+            return tuple(_deep_copy_value(item) for item in val)
+        else:
+            # 其他类型使用标准深拷贝
+            return deepcopy(val)
+    except Exception:
+        # 如果深拷贝失败，尝试使用copy方法或返回原对象
+        if hasattr(val, 'copy'):
+            return val.copy()
+        else:
+            return val
+
+
+def _repeat_interleave(value: Union[torch.Tensor, np.ndarray], repeats: int) -> Union[torch.Tensor, list[Any]]:
+    if isinstance(value, torch.Tensor):
+        # 使用 clone() 确保深拷贝，避免内存共享
+        return value.clone().repeat_interleave(repeats, dim=0)
+    elif isinstance(value, np.ndarray):
+        # 检查是否是包含复杂对象的numpy数组
+        if value.dtype == object:
+            # 对于包含复杂对象（如PIL.Image、字典等）的numpy数组，需要特殊处理
+            # 形式: [A,B] -> [A,A,B,B] (每个元素重复repeats次)
+            repeated_list = []
+            for item in value:
+                for _ in range(repeats):
+                    # 使用辅助函数深拷贝复杂对象
+                    repeated_list.append(_deep_copy_value(item))
+            return np.array(repeated_list, dtype=object)
+        else:
+            # 对于普通numpy数组，使用copy()后重复
+            return np.repeat(value.copy(), repeats, axis=0)
+    else:
+        # 对其他类型（如列表等）使用深拷贝后重复
+        # 形式: [A,B] -> [A,A,B,B] (每个元素重复repeats次)
+        repeated_list = []
+        for item in value:
+            for _ in range(repeats):
+                repeated_list.append(deepcopy(item))
+        return repeated_list
+
+
+def _repeat_tile(value: Union[torch.Tensor, np.ndarray], repeats: int) -> Union[torch.Tensor, list[Any]]:
+    """非交错重复，形式: [A,B] -> [A,B,A,B]"""
+    if isinstance(value, torch.Tensor):
+        # 使用torch.cat确保深拷贝
+        return torch.cat([value.clone()] * repeats, dim=0)
+    elif isinstance(value, np.ndarray):
+        if value.dtype == object:
+            # 对于包含复杂对象的numpy数组
+            # 形式: [A,B] -> [A,B,A,B] (整个数组重复repeats次)
+            repeated_list = []
+            for _ in range(repeats):
+                for item in value:
+                    repeated_list.append(_deep_copy_value(item))
+            return np.array(repeated_list, dtype=object)
+        else:
+            # 对于普通numpy数组
+            return np.tile(value.copy(), (repeats,) + (1,) * (value.ndim - 1))
+    else:
+        # 对其他类型
+        repeated_list = []
+        for _ in range(repeats):
+            for item in value:
+                repeated_list.append(deepcopy(item))
+        return repeated_list

@@ -27,7 +27,9 @@ When working with Megatron:
 """
 
 import logging
-import os
+import os,sys
+from typing import Any, Dict, List, Union
+
 import pickle
 import socket
 import threading
@@ -273,12 +275,12 @@ class vLLMRollout(BaseRollout):
         if "multi_modal_data" in non_tensor_batch:
             vllm_inputs = []
             for raw_prompt_ids, multi_modal_data in zip(
-                non_tensor_batch.pop("raw_prompt_ids"), non_tensor_batch.pop("multi_modal_data"), strict=True
+                non_tensor_batch.get("raw_prompt_ids"), non_tensor_batch.get("multi_modal_data"), strict=True
             ):
                 vllm_inputs.append({"prompt_token_ids": raw_prompt_ids, "multi_modal_data": multi_modal_data})
         else:
             vllm_inputs = [
-                {"prompt_token_ids": raw_prompt_ids} for raw_prompt_ids in non_tensor_batch.pop("raw_prompt_ids")
+                {"prompt_token_ids": raw_prompt_ids} for raw_prompt_ids in non_tensor_batch.get("raw_prompt_ids")
             ]
 
         # ensure the type of `prompt_token_ids` passed to vllm is list[int]

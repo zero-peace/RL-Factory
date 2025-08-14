@@ -39,6 +39,9 @@ actor_rollout_ref:
     max_size: 1000
     persist_dir: ./cache
     local_cache: null
+    mmtool: False
+    load_custom_chat_template: null
+
 
 
 trainer:
