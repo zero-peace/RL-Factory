@@ -720,6 +720,7 @@ class ActorRolloutRefWorker(Worker):
         prompts.meta_info.update(meta_info)
 
         su = ToolUtils(self.tokenizer, meta_info, self.rollout.config, env_object=self.env_object)
+        # 模态区分
 
         with self.rollout_sharding_manager:
 
