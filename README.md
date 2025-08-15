@@ -119,9 +119,9 @@ We welcome all users and developers to contribute code to RLFactory. If you have
 
 1. Submit an issue directly on GitHub.  
 2. Contact us via email at chaijiajun@meituan.com or gjyin@outlook.com.
-3. Join our WeChat group and become a pioneer in Agent training!
+3. Join our WeChat group(preferred) and become a pioneer in Agent training!
 <div align="center">
-  <img src="https://github.com/user-attachments/assets/398696f3-52e5-4ecf-add1-224afcd073e2" alt="Description" style="width:200px; height:auto;"/>
+  <img src="https://github.com/user-attachments/assets/5e0639d1-cab7-43aa-b320-0808f9737b61" alt="Description" style="width:200px; height:auto;"/>
   <img src="https://github.com/user-attachments/assets/e59f1a14-faee-4ec8-97cd-5e90ff34a43d" alt="Description" style="width:200px; height:auto;"/>
 </div>
 
