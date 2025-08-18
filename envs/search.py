@@ -142,25 +142,52 @@ class SearchEnv(Env):
                 else:
                     return total_format_score
         
-        def check_alternate_tags(text, tag_pattern):
-            # 匹配所有<tool_call>和</tool_call>标签
-            tags = re.findall(tag_pattern, text)
+        # def check_alternate_tags(text, tag_pattern):
+        #     # 匹配所有<tool_call>和</tool_call>标签
+        #     tags = re.findall(tag_pattern, text)
             
+        #     stack = []
+        #     for tag in tags:
+        #         if tag == "<tool_call>":
+        #             if stack:
+        #                 # 发现有嵌套，说明不是严格交替
+        #                 return False
+        #             stack.append(tag)
+        #         elif tag == "</tool_call>":
+        #             if not stack:
+        #                 # 没有对应的<tool_call>，说明标签不配对
+        #                 return False
+        #             stack.pop()
+            
+        #     # 最终栈必须为空，才是严格交替
+        #     return len(stack) == 0
+
+        def check_alternate_tags(text, tag_pattern):
+            # 用正则提取标签名
+            match = re.match(r"<\/?(\w+)>", re.findall(tag_pattern, text)[0]) if re.findall(tag_pattern, text) else None
+            if not match:
+                return False
+            tagname = match.group(1)
+            open_tag = f"<{tagname}>"
+            close_tag = f"</{tagname}>"
+
+            tags = re.findall(tag_pattern, text)
+
             stack = []
             for tag in tags:
-                if tag == "<tool_call>":
+                if tag == open_tag:
                     if stack:
                         # 发现有嵌套，说明不是严格交替
                         return False
                     stack.append(tag)
-                elif tag == "</tool_call>":
+                elif tag == close_tag:
                     if not stack:
-                        # 没有对应的<tool_call>，说明标签不配对
+                        # 没有对应的开放标签，说明标签不配对
                         return False
                     stack.pop()
-            
             # 最终栈必须为空，才是严格交替
             return len(stack) == 0
+
 
         format_score = 0.0 if if_val else 0.1
         scores = []
