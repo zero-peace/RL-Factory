@@ -19,7 +19,7 @@
             last_one_idx = torch.where(response_attention_mask == 1)[0][-1]
             step_mask[i, last_one_idx] = 1
     ```
-+ **步骤3**：调用`env_object.compute_score()`并行计算批次奖赏，其分为1）使用规则计算，以及2）使用模型评判两种方式（两种方式细节的请见后文）
++ **步骤3**：调用`env_object.compute_score()`并行计算batch reward，其分为1）使用规则计算，以及2）使用模型评判两种方式（两种方式细节的请见后文）
     ```python
     def compute_score(self, reward_rollout_wg, reward_tokenizer, tokenizer, data: DataProto):
         if reward_rollout_wg is not None:
@@ -46,7 +46,7 @@
     值得注意的是，尽管目前框架仅支持结果奖赏设置，但我们为保留后续实现过程奖赏时的拓展性，`scores`实际上是一个是`list[list[float]]`，其中的第一层代表当前`batch`的大小，第二层则代表每个`batch`中`reward`的数量（当前仅为1），过程奖赏的`reward_tensor`将由`step_mask`的计算逻辑提供具体的赋值索引。
 
 ## 基于规则的奖赏计算
-+ 基于规则的方式是在verl的基础上基于asyncio实现了异步的**并行reward计算**，使用者仅需修改`_compute_score_with_rules`方法，与`verl`中一样定义奖赏函数即可，例如可以直接将[Search-R1](https://github.com/PeterGriffinJin/Search-R1)中的奖赏函数[`qa_em.py`](https://github.com/PeterGriffinJin/Search-R1/blob/main/verl/utils/reward_score/qa_em.py)迁移过来
++ 基于规则的方式是在verl的基础上基于asyncio实现了异步的 **并行reward计算** ，使用者仅需修改`_compute_score_with_rules`方法，与`verl`中一样定义奖赏函数即可，例如可以直接将[Search-R1](https://github.com/PeterGriffinJin/Search-R1)中的奖赏函数[`qa_em.py`](https://github.com/PeterGriffinJin/Search-R1/blob/main/verl/utils/reward_score/qa_em.py)迁移过来
     ```python
     def _compute_score_with_rules(self, data, tokenizer):
         def normalize_answer(s):

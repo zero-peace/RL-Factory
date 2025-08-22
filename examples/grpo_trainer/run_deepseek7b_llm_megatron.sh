@@ -37,3 +37,7 @@ python3 -m verl.trainer.main_ppo --config-path=config \
     trainer.save_freq=-1 \
     trainer.test_freq=5 \
     trainer.total_epochs=15 $@
+
+
+
+    

@@ -840,6 +840,7 @@ class DataProto:
                     # 使用深拷贝的非交错重复
                     repeated_tensors[key] = torch.cat([tensor.clone()] * repeat_times, dim=0)
 
+
             repeated_batch = TensorDict(
                 source=repeated_tensors,
                 batch_size=(self.batch.batch_size[0] * repeat_times,),

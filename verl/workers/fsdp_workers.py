@@ -834,6 +834,7 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             su = MMToolUtils(self.tokenizer, processor=self.processor, meta_info=meta_info, config=self.rollout.config, env_object=self.env_object)
         else:
             su = ToolUtils(self.tokenizer, meta_info, self.rollout.config, env_object=self.env_object)
+
         with self.rollout_sharding_manager:
 
             # after parameters sync with rollout, offload actor model to CPU
