@@ -3,15 +3,18 @@ import json
 import string
 import torch
 import sys
-from .base import Env
 
-class VisionEnv(Env):
-    """Vision environment for processing and scoring responses with tool usage"""
-    
+from typing import List
+from PIL import Image
+from .mmbase import MMEnv
+
+class VisionEnv(MMEnv):
     def __init__(self, config, centralized_actor=None):
         """Initialize vision environment with configuration"""
         super().__init__(config, centralized_actor)
         self.use_verify_tool = False
+        
+
 
     def get_step_reward(self, responses, format_score=0.1):
         """Calculate step reward based on tool usage validity"""
