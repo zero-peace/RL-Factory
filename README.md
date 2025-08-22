@@ -32,10 +32,10 @@ We’ll keep a fast release cycle to quickly deliver and polish the upcoming fea
   + **More models**: test more models (such as Deepseek, Llama, etc.) and add corresponding support configurations [#5](https://github.com/Simple-Efficient/RL-Factory/issues/5)
   + **Process Reward**: use process reward to better guide the tool-call behavior of your model [#6](https://github.com/Simple-Efficient/RL-Factory/issues/6)
   + **More applications**: help create more demos (such as [TravelPlanner](https://github.com/OSU-NLP-Group/TravelPlanner)) to adapt to more benchmarks
-  + **Multimodal agentic learning**: support multimodal (image) agent training in terms of functionality
-  + **Android Environment**: added Android OS environment support
-  + **Tools cache**: cached tool invocation results to enhance post-processing efficiency
-  + **Handy evaluation**: added main_eval.sh for evaluation utility
+  + **Multimodal agentic learning**: support multimodal (image) agent training in terms of functionality [#58](https://github.com/Simple-Efficient/RL-Factory/issues/58)
+  + **Android Environment**: added Android OS environment support [#38](https://github.com/Simple-Efficient/RL-Factory/pull/38)
+  + **Tools cache**: cached tool invocation results to enhance post-processing efficiency [#57](https://github.com/Simple-Efficient/RL-Factory/pull/57)
+  + **Handy evaluation**: added main_eval.sh for evaluation utility [#36](https://github.com/Simple-Efficient/RL-Factory/pull/36)
 
 ## Our Framework Design
 Our goal is to enable users to focus on reward logic and tool setup for fast agentic learning with minimal code, while hardcore developers could focus on improving training efficiency and model performance. 
