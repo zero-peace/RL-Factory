@@ -94,7 +94,7 @@ class VisionEnv(Env):
         scores = []
         
         if verbose:
-            print(f"\n=== 开始评分 {len(data)} 个样本 ===", file=sys.stderr)
+            print(f"\n=== start evaluating {len(data)} samples ===", file=sys.stderr)
         
         for i, data_item in enumerate(data):
             processed_data = self._process_data(data_item=data_item, tokenizer=tokenizer)
@@ -108,28 +108,28 @@ class VisionEnv(Env):
             # 计算分数
             if answer is None:
                 score = -format_score + 0.5 * format_score_val
-                result = "无答案"
+                result = "No Ans"
             else:
                 normalized_answer = self._normalize_answer(answer)
                 is_correct = any(self._normalize_answer(truth) == normalized_answer 
                                for truth in ground_truth)
                 if is_correct:
                     score = 1.0 + 0.5 * format_score_val
-                    result = "正确"
+                    result = "Correct"
                 else:
                     score = format_score_val
-                    result = "错误"
+                    result = "Wrong"
             
             if verbose:
-                print(f"\n#{i+1}: {result} | 分数: {score:.3f}", file=sys.stderr)
-                print(f"问题: {processed_data.get('prompt_str', '')[:200]}...", file=sys.stderr)
-                print(f"答案: {answer or '未提取到'}", file=sys.stderr)
-                print(f"标准: {ground_truth}", file=sys.stderr)
+                print(f"\n#{i+1}: {result} | score: {score:.3f}", file=sys.stderr)
+                print(f"Q: {processed_data.get('prompt_str', '')[:200]}...", file=sys.stderr)
+                print(f"A: {answer or 'extraction failure'}", file=sys.stderr)
+                print(f"std: {ground_truth}", file=sys.stderr)
             
             scores.append([score])
         
         if verbose:
             avg_score = sum(s[0] for s in scores) / len(scores)
-            print(f"\n=== 平均分: {avg_score:.3f} ===", file=sys.stderr)
+            print(f"\n=== Avg Score: {avg_score:.3f} ===", file=sys.stderr)
 
         return scores
