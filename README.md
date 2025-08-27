@@ -1,4 +1,4 @@
-<div align="center">
+![435cf0b51becd3da29452671b2cf14f1](https://github.com/user-attachments/assets/1fb9439f-3c86-4289-b289-d74290e36588)<div align="center">
   <img src="https://github.com/user-attachments/assets/9793f779-c80e-48e6-813a-1c8f377cf5d1" alt="Description" style="width:300px; height:auto;"/>
 </div>
 
@@ -126,7 +126,7 @@ We welcome all users and developers to contribute code to RLFactory. If you have
 2. Contact us via email at chaijiajun@meituan.com or gjyin@outlook.com.
 3. Join our WeChat group(preferred) and become a pioneer in Agent training!
 <div align="center">
-  <img src="https://github.com/user-attachments/assets/5e0639d1-cab7-43aa-b320-0808f9737b61" alt="Description" style="width:200px; height:auto;"/>
+  <img src="https://github.com/user-attachments/assets/773a834d-d0c6-4454-9c5d-3e421ca9ad05" alt="Description" style="width:200px; height:auto;"/>
   <img src="https://github.com/user-attachments/assets/e59f1a14-faee-4ec8-97cd-5e90ff34a43d" alt="Description" style="width:200px; height:auto;"/>
 </div>
 
