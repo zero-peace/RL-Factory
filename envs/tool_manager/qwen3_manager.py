@@ -60,6 +60,19 @@ class QwenManager(ToolManager):
         """
         name_or_short_name = str(name_or_short_name)
         return self.tool_map.get(name_or_short_name, None)
+        #name_or_short_name = str(name_or_short_name)
+        #if name_or_short_name in self.tool_map.keys():
+        #    print("matching found: ", name_or_short_name)
+        #    return self.tool_map[name_or_short_name]
+        #    #return self.tool_map.get(name_or_short_name, None)
+        #else:
+        #    for key in self.tool_map.keys():
+        #        print("matching: ", key, "-" + name_or_short_name)
+        #        # matching the 2nd half of the name
+        #        if "-" + name_or_short_name in key:
+        #            print(f"{name_or_short_name} not found, using {key} instead")
+        #            return self.tool_map[key]
+        #    return None
     
     @property
     def all_tools(self):
@@ -193,6 +206,7 @@ class QwenManager(ToolManager):
         return results
 
     def _init_tool(self, tool: Union[str, BaseTool]):
+        print(f'tool: {tool}')
         if isinstance(tool, BaseTool):
             tool_name = tool.name
             self.tool_map[tool_name] = tool
@@ -211,6 +225,7 @@ class QwenManager(ToolManager):
             for tool in tools:
                 tool_name = tool.name
                 self.tool_map[tool_name] = tool
+                print(f'register tool: {tool_name} --> {tool}')
         else:
             if isinstance(tool, dict):
                 tool_name = tool['name']
@@ -238,6 +253,7 @@ class QwenManager(ToolManager):
             # if temp_action is 'answer', temp_tool_list is the answer
             # else, temp_tool_list is the list of the 'Tool' instances
             actions.append(temp_action)
+            temp_tool_list = self.full_name(temp_tool_list)
             tools.append(temp_tool_list)
 
         # 使用asyncio.run同步运行异步函数
