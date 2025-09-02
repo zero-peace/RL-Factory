@@ -56,6 +56,11 @@ from verl.workers.actor.megatron_actor import MegatronPPOActor
 from verl.workers.critic.megatron_critic import MegatronPPOCritic
 from verl.workers.reward_model.megatron.reward_model import MegatronRewardModel
 
+from verl.protocol import broadcast_data_proto
+from envs.utils.tool_utils import ToolUtils
+from envs.utils.mm_tool_utils import MMToolUtils
+from envs import TOOL_ENV_REGISTRY
+
 logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
 
@@ -185,10 +190,9 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
                     post_model_creation_callbacks=post_model_creation_callbacks, wrap_with_ddp=wrap_with_ddp
                 )
             else:
-
                 def megatron_actor_model_provider(pre_process, post_process):
                     from verl.models.mcore import init_mcore_model
-
+                    
                     parallel_model = init_mcore_model(
                         self.tf_config,
                         self.hf_config,
@@ -564,6 +568,81 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
             output = self.sharding_manager.postprocess_data(output)
             log_gpu_memory_usage("After rollout generation", logger=logger)
 
+        timing_generate.update(self.sharding_manager.timing)
+        # We calculate the average timing across all ranks
+        # to make sure meta_info["timing"] is the same
+        timing_generate = reduce_timing(timing_generate)
+        output.meta_info["timing"] = timing_generate
+        output = output.to("cpu")
+        # clear kv cache
+        get_torch_device().empty_cache()
+        return output
+
+    @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
+    @GPUMemoryLogger(role="generate_sequences", logger=logger)
+    @DistProfiler.annotate(color="red")
+    def generate_sequences_loop(self, prompts: DataProto):
+        assert self._is_rollout
+        prompts.batch = prompts.batch.to(get_device_name())
+        meta_info = {
+            "eos_token_id": self.generation_config.eos_token_id
+            if self.generation_config is not None
+            else self.tokenizer.eos_token_id,
+            "pad_token_id": self.generation_config.pad_token_id
+            if self.generation_config is not None
+            else self.tokenizer.pad_token_id,
+        }
+        prompts.meta_info.update(meta_info)
+        if self._is_offload_optimizer:
+            offload_megatron_optimizer(self.actor_optimizer)
+        
+        if self.config.env.mmtool: # for mm tool use
+            su = MMToolUtils(self.tokenizer, processor=self.processor, meta_info=meta_info, config=self.rollout.config, env_object=self.env_object)
+        else:
+            su = ToolUtils(self.tokenizer, meta_info, self.rollout.config, env_object=self.env_object)
+
+        timing_generate = {}
+        with self.sharding_manager:
+            prompts = self.rollout_sharding_manager.preprocess_data(prompts)
+
+            max_turns = self.rollout.config.max_turns
+            tp_group, tp_rank = self.rollout_sharding_manager.get_tp_group_and_rank()
+            
+            for step in range(max_turns):
+                prompts = prompts.to(torch.cuda.current_device())
+                output = self.rollout.generate_sequences(prompts=prompts)
+
+                log_gpu_memory_usage('After rollout generation', logger=logger)
+                output = output.to('cpu')
+                output.meta_info.update(prompts.meta_info)
+                
+                # After rollout_sharding_manager.preprocess_data, all tp rank has identical input and output 
+                # So we only postprocess_out put in tp0
+                # in the end,  we will broadcast output from tp0 to other tprank
+                if tp_rank == 0:
+                    prompts = su.postprocess_output(output, step)
+                    is_finish = prompts is None
+                else:
+                    prompts = DataProto()
+                    is_finish = None
+                object_list = [is_finish]
+                torch.distributed.broadcast_object_list(object_list, group=tp_group, group_src=0)
+                is_finish = object_list[0]
+
+                if is_finish:
+                    break
+                else:
+                    broadcast_data_proto(prompts, process_group=tp_group, group_src=0)
+            
+            dp_group = self.rollout_sharding_manager.get_dp_group()
+            if tp_rank == 0:
+                output = su.compose_final_output(step=step, group=dp_group)
+            else:
+                output = DataProto()
+            broadcast_data_proto(output, process_group=tp_group, group_src=0)
+            
+            output = self.rollout_sharding_manager.postprocess_data(output)
+        
         timing_generate.update(self.sharding_manager.timing)
         # We calculate the average timing across all ranks
         # to make sure meta_info["timing"] is the same
@@ -1156,4 +1235,139 @@ class RewardModelWorker(MegatronWorker, DistProfilerExtension):
         data = data.to(get_device_id())
         output = self.rm.compute_reward(data)
         output = output.to("cpu")
+        return output
+
+
+class RewardRolloutWorker(MegatronWorker, DistProfilerExtension):
+    """
+    This worker can be instantiated as a standalone actor or a standalone rollout or a standalone reference policy
+    or a hybrid engine based on the config.rollout
+    """
+
+    def __init__(self, config: DictConfig, role: str, **kwargs):
+        MegatronWorker.__init__(self)
+        self.config = config
+
+        # NOTE(sgm): We utilize colocate WorkerGroup by default.
+        # As a result, Workers for different model share the same process.
+        # Therefore, we only require one distribute initialization.
+        # To utilize different parallel strategy in different models:
+        # 1, users should disable WorkerDict; 2.assign different ResourcePool to different models,
+        # 3. and apply the following patch in ray==2.10, https://github.com/ray-project/ray/pull/44385
+        if not torch.distributed.is_initialized():
+            rank = int(os.environ["LOCAL_RANK"])
+            torch.distributed.init_process_group(
+                backend=get_nccl_backend(),
+                timeout=datetime.timedelta(seconds=self.config.get("nccl_timeout", 600)),
+                init_method=os.environ.get("DIST_INIT_METHOD", None),
+            )
+            get_torch_device().set_device(rank)
+
+            mpu.initialize_model_parallel(
+                tensor_model_parallel_size=self.config.rollout.tensor_model_parallel_size,
+                use_sharp=False,
+                # context_parallel_size=self.config.rollout.context_parallel_size,
+                # expert_model_parallel_size=self.config.actor.megatron.expert_model_parallel_size,
+                # expert_tensor_parallel_size=self.config.actor.megatron.expert_tensor_parallel_size,
+            )
+
+        set_random_seed(seed=self.config.rollout.seed)
+
+        self.role = role
+        assert self.role == 'reward_rollout'
+
+    def _build_rollout(self, trust_remote_code=False):
+        from torch.distributed.device_mesh import init_device_mesh
+
+        from verl.workers.rollout.vllm_rollout import vLLMRewardRollout, vLLMAsyncRollout
+        from verl.workers.sharding_manager.megatron_vllm import MegatronVLLMRewardShardingManager
+
+        # NOTE(sgm): If the QKV and gate_up projection layer are concate together in actor,
+        # we will reorganize their weight format when resharding from actor to rollout.
+
+        infer_tp = self.config.rollout.tensor_model_parallel_size
+        dp = self.world_size // infer_tp
+        assert self.world_size % infer_tp == 0, (
+            f"rollout world_size: {self.world_size} is not divisible by infer_tp: {infer_tp}"
+        )
+        rollout_device_mesh = init_device_mesh(
+            get_device_name(), mesh_shape=(dp, infer_tp), mesh_dim_names=["dp", "infer_tp"]
+        )
+        log_gpu_memory_usage("Before building vllm rollout", logger=None)
+
+        from verl.utils.model import get_generation_config
+        local_path = copy_to_local(self.config.rollout.model_name, use_shm=self.config.get("use_shm", False))
+        self.tokenizer = hf_tokenizer(local_path, trust_remote_code=False)
+        self.generation_config = get_generation_config(local_path, trust_remote_code=False)
+
+        vllm_rollout_cls = vLLMRewardRollout
+        rollout = vllm_rollout_cls(
+            model_path=local_path,
+            config=self.config.rollout,
+            tokenizer=self.tokenizer,
+            device_mesh=rollout_device_mesh,
+            trust_remote_code=trust_remote_code,
+        )
+        log_gpu_memory_usage("After building vllm rollout", logger=logger)
+
+        sharding_manager = MegatronVLLMRewardShardingManager(
+            inference_engine=rollout.inference_engine,
+            device_mesh=rollout_device_mesh,
+        )
+        log_gpu_memory_usage("After building sharding manager", logger=logger)
+
+        print(f"rollout and sharding manager init done sharding_manager: {sharding_manager}")
+        return rollout, sharding_manager
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    def init_model(self):
+        from verl.utils.torch_dtypes import PrecisionType
+
+        self.param_dtype = torch.bfloat16
+        log_gpu_memory_usage("Before init actor model and optimizer", logger=logger)
+        self.dtype = PrecisionType.to_dtype(self.param_dtype)
+
+        self.rollout, self.sharding_manager = self._build_rollout(
+            trust_remote_code=self.config.rollout.get("trust_remote_code", False)
+        )
+        # used for sleep/wake_up
+        self.rollout.sharding_manager = self.sharding_manager
+        log_gpu_memory_usage("After rollout init", logger=logger)
+
+        get_torch_device().empty_cache()
+        log_gpu_memory_usage("After init_model finish", logger=logger)
+
+    @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
+    @GPUMemoryLogger(role="generate_sequences", logger=logger)
+    @DistProfiler.annotate(color="red")
+    def generate_sequences(self, prompts: DataProto):
+        assert self._is_rollout
+        prompts.batch = prompts.batch.to(get_device_name())
+        meta_info = {
+            "eos_token_id": self.generation_config.eos_token_id
+            if self.generation_config is not None
+            else self.tokenizer.eos_token_id,
+            "pad_token_id": self.generation_config.pad_token_id
+            if self.generation_config is not None
+            else self.tokenizer.pad_token_id,
+        }
+        prompts.meta_info.update(meta_info)
+
+        timing_generate = {}
+        with self.sharding_manager:
+            log_gpu_memory_usage("After entering sharding manager", logger=logger)
+            prompts = self.sharding_manager.preprocess_data(prompts)
+            with simple_timer("generate_sequences", timing_generate):
+                output = self.rollout.generate_sequences(prompts=prompts)
+            output = self.sharding_manager.postprocess_data(output)
+            log_gpu_memory_usage("After rollout generation", logger=logger)
+
+        timing_generate.update(self.sharding_manager.timing)
+        # We calculate the average timing across all ranks
+        # to make sure meta_info["timing"] is the same
+        timing_generate = reduce_timing(timing_generate)
+        output.meta_info["timing"] = timing_generate
+        output = output.to("cpu")
+        # clear kv cache
+        get_torch_device().empty_cache()
         return output
