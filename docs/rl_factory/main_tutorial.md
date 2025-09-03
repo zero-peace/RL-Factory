@@ -13,6 +13,7 @@
         cat $save_path/part_* > $save_path/e5_Flat.index
         gzip -d $save_path/wiki-18.jsonl.gz
         ```
+        
     + **Process the dataset**
         ```bash
         python rag_server/data_process/nq_search.py
@@ -126,7 +127,7 @@
     ...
     actor_rollout_ref.env.name=search\
     actor_rollout_ref.env.tool_manager=qwen3\
-    actor_rollout_ref.env.enable_thinking=True\
+    actor_rollout_ref.env.enable_thinking=False\
     actor_rollout_ref.env.config_path=/the/path/to/mcp_tools.pydata\
     ...
     ```

@@ -1,3 +1,4 @@
+# example for deepsearch demo (ppo)
 set -e -x
 FILE="$(pwd)/verl/utils/reward_score/search.py"
 FUNCTION_NAME="compute_score"
