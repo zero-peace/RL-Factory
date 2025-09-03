@@ -133,6 +133,14 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
         profiler_config = omega_conf_to_dataclass(config.get("profiler"))
         DistProfilerExtension.__init__(self, DistProfiler(rank=self.rank, config=profiler_config))
 
+        self.centralized_tool_actor = None
+        tool_manager_name = self.config.env.get('tool_manager', '')
+        if not tool_manager_name:
+            tool_manager_name = "adaptive"
+
+        if hasattr(self.config, 'env') and tool_manager_name.startswith('centralized_'):
+            self._init_centralized_tool_actor()
+        
         # TODO(sgm): Currently, we only support reference model param offload
         # will support other offload later
         self._is_offload_param = False
@@ -163,6 +171,43 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
                 )
             self._ref_is_offload_param = self.config.ref.megatron.get("param_offload", False)
 
+    def _init_centralized_tool_actor(self):
+        """初始化集中式工具管理器Actor"""
+        import ray
+        from envs.tool_manager.centralized.centralized_qwen3_manager import CentralizedToolActor
+        
+        # 只有rank 0的worker负责创建集中式Actor
+        if self.rank == 0:
+            try:
+                # 尝试获取已存在的Actor
+                centralized_actor = ray.get_actor("centralized_tool_actor")
+                print("发现已存在的集中式工具Actor")
+            except ValueError:
+                # Actor不存在，创建新的
+                print("创建新的集中式工具Actor - rank {}".format(self.rank))
+                centralized_actor = CentralizedToolActor.options(
+                    name="centralized_tool_actor",
+                    max_concurrency=self.config.actor_rollout_ref.env.get('max_concurrency', 10)
+                ).remote(self.config.env)
+            
+            self.centralized_tool_actor = centralized_actor
+        else:
+            # 其他worker等待并获取Actor句柄
+            import time
+            max_wait_time = 60  # 最多等待60秒
+            start_time = time.time()
+            
+            while time.time() - start_time < max_wait_time:
+                try:
+                    self.centralized_tool_actor = ray.get_actor("centralized_tool_actor")
+                    print(f"Worker {self.rank} 成功获取集中式工具Actor")
+                    break
+                except ValueError:
+                    time.sleep(1)  # 等待1秒后重试
+            
+            if self.centralized_tool_actor is None:
+                raise RuntimeError(f"Worker {self.rank} 在{max_wait_time}秒内无法获取集中式工具Actor")
+    
     def _build_model_optimizer(self, model_path, optim_config, override_model_config, override_transformer_config):
         from verl.utils.megatron.optimizer import get_megatron_optimizer, get_megatron_optimizer_param_scheduler
         from verl.utils.megatron_utils import get_model, init_megatron_optim_config
@@ -192,7 +237,7 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
             else:
                 def megatron_actor_model_provider(pre_process, post_process):
                     from verl.models.mcore import init_mcore_model
-                    
+
                     parallel_model = init_mcore_model(
                         self.tf_config,
                         self.hf_config,
@@ -497,6 +542,11 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
         get_torch_device().empty_cache()
         log_gpu_memory_usage("After init_model finish", logger=logger)
 
+        self.env_object = TOOL_ENV_REGISTRY[self.config.env.name](
+            config=self.config.env, 
+            centralized_actor=self.centralized_tool_actor
+        )
+
     @register(dispatch_mode=Dispatch.MEGATRON_COMPUTE_PROTO)
     @GPUMemoryLogger(role="update_actor", logger=logger)
     @DistProfiler.annotate(color="red")
@@ -579,7 +629,7 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
         return output
 
     @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
-    @GPUMemoryLogger(role="generate_sequences", logger=logger)
+    @GPUMemoryLogger(role="generate_sequences_loop", logger=logger)
     @DistProfiler.annotate(color="red")
     def generate_sequences_loop(self, prompts: DataProto):
         assert self._is_rollout
@@ -596,19 +646,23 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
         if self._is_offload_optimizer:
             offload_megatron_optimizer(self.actor_optimizer)
         
+        print('-' * 100)
         if self.config.env.mmtool: # for mm tool use
             su = MMToolUtils(self.tokenizer, processor=self.processor, meta_info=meta_info, config=self.rollout.config, env_object=self.env_object)
         else:
             su = ToolUtils(self.tokenizer, meta_info, self.rollout.config, env_object=self.env_object)
 
         timing_generate = {}
+        print('=' * 100)
         with self.sharding_manager:
-            prompts = self.rollout_sharding_manager.preprocess_data(prompts)
+            print('*' * 100)
+            prompts = self.sharding_manager.preprocess_data(prompts)
 
             max_turns = self.rollout.config.max_turns
-            tp_group, tp_rank = self.rollout_sharding_manager.get_tp_group_and_rank()
+            tp_group, tp_rank = self.sharding_manager.get_tp_group_and_rank()
             
             for step in range(max_turns):
+                print('Loop step: {}'.format(step))
                 prompts = prompts.to(torch.cuda.current_device())
                 output = self.rollout.generate_sequences(prompts=prompts)
 
