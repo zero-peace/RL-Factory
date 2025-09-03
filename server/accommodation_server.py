@@ -4,6 +4,7 @@ from typing import List, Optional
 from base_server import BaseServer
 import pandas as pd
 
+
 class AccommodationRequest(BaseModel):
     city: str = Field(..., description="城市名称")
 

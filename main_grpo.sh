@@ -8,6 +8,7 @@ export RESULT_DIR=qwen3-4b-travel-agent
 
 bash server/launch.sh
 
+
 python3 -m verl.trainer.main_ppo --config-name=rl_factory_ppo_trainer \
     algorithm.adv_estimator=grpo\
     data.train_files=$DATA_PATH/train.parquet\
