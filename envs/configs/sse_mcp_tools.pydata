@@ -2,10 +2,6 @@
     {'mcpServers': {
         'meituan_search': {
             'url': 'http://xxxx:8080/sse',
-            'options': {
-                'disable_validation_warnings': true,
-                'notification_level': 'error'
-            }
         }
     }}
 ]
