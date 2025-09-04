@@ -218,6 +218,13 @@ class MegatronVLLMShardingManager(BaseShardingManager):
             return data
         return data.chunk(chunks=self.infer_tp_size)[self.infer_tp_rank]
 
+    def get_tp_group_and_rank(self):
+        # TODO: Current impl doesn't consider FSDP with torch micro-dp
+        return self.device_mesh["infer_tp"].get_group(), self.device_mesh["infer_tp"].get_local_rank()
+    
+    def get_dp_group(self):
+        return self.device_mesh["dp"].get_group()
+
 
 class MegatronVLLMRewardShardingManager(MegatronVLLMShardingManager):
     """A sharding manager that bridges Megatron-LM training with vLLM inference.

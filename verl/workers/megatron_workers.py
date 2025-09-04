@@ -176,6 +176,8 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
         import ray
         from envs.tool_manager.centralized.centralized_qwen3_manager import CentralizedToolActor
         
+        logger = logging.getLogger('centralized_tool_actor')
+        logger.setLevel(logging.ERROR)
         # 只有rank 0的worker负责创建集中式Actor
         if self.rank == 0:
             try:
@@ -646,16 +648,13 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
         if self._is_offload_optimizer:
             offload_megatron_optimizer(self.actor_optimizer)
         
-        print('-' * 100)
         if self.config.env.mmtool: # for mm tool use
             su = MMToolUtils(self.tokenizer, processor=self.processor, meta_info=meta_info, config=self.rollout.config, env_object=self.env_object)
         else:
             su = ToolUtils(self.tokenizer, meta_info, self.rollout.config, env_object=self.env_object)
 
         timing_generate = {}
-        print('=' * 100)
         with self.sharding_manager:
-            print('*' * 100)
             prompts = self.sharding_manager.preprocess_data(prompts)
 
             max_turns = self.rollout.config.max_turns
@@ -688,14 +687,14 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
                 else:
                     broadcast_data_proto(prompts, process_group=tp_group, group_src=0)
             
-            dp_group = self.rollout_sharding_manager.get_dp_group()
+            dp_group = self.sharding_manager.get_dp_group()
             if tp_rank == 0:
                 output = su.compose_final_output(step=step, group=dp_group)
             else:
                 output = DataProto()
             broadcast_data_proto(output, process_group=tp_group, group_src=0)
             
-            output = self.rollout_sharding_manager.postprocess_data(output)
+            output = self.sharding_manager.postprocess_data(output)
         
         timing_generate.update(self.sharding_manager.timing)
         # We calculate the average timing across all ranks
