@@ -364,36 +364,8 @@ class MCPClient:
                     self._session_context = ClientSession(read_stream, write_stream)
                     self.session = await self.exit_stack.enter_async_context(self._session_context)
                 else:
-                    # sse mode
-                    class FilteredSSEClient:
-                        def __init__(self, original_client):
-                            self._client = original_client
-                        
-                        async def __aenter__(self):
-                            streams = await self._client.__aenter__()
-                            original_read_stream = streams[0]
-                            
-                            # 创建一个过滤后的read stream
-                            async def filtered_read_stream():
-                                while True:
-                                    message = await original_read_stream()
-                                    # 过滤掉ping和validation相关的消息
-                                    if message and isinstance(message, dict):
-                                        if message.get('method') == 'ping':
-                                            continue
-                                        if 'validation errors' in str(message):
-                                            continue
-                                    yield message
-                            
-                            return (filtered_read_stream, streams[1])
-                        
-                        async def __aexit__(self, *args):
-                            await self._client.__aexit__(*args)
-
                     headers = mcp_server.get('headers', {'Accept': 'text/event-stream'})
-                    # self._streams_context = sse_client(url, headers, sse_read_timeout=sse_read_timeout)
-                    original_client = sse_client(url, headers, sse_read_timeout=sse_read_timeout)
-                    self._streams_context = FilteredSSEClient(original_client)
+                    self._streams_context = sse_client(url, headers, sse_read_timeout=sse_read_timeout)
                     streams = await self.exit_stack.enter_async_context(self._streams_context)
                     self._session_context = ClientSession(*streams)
                     self.session = await self.exit_stack.enter_async_context(self._session_context)

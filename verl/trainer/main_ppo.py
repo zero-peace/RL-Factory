@@ -106,14 +106,7 @@ class TaskRunner:
         Args:
             config: Training configuration object containing all parameters needed
                    for setting up and running the PPO training process.
-        """
-        # 在远程worker中也屏蔽MCP警告
-        try:
-            from envs.utils.suppress_mcp_warnings import patch_ray_worker_logging
-            patch_ray_worker_logging()
-        except ImportError:
-            pass
-        
+        """        
         # Print the initial configuration. `resolve=True` will evaluate symbolic values.
         from pprint import pprint
 
