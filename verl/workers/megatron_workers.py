@@ -175,9 +175,7 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
         """初始化集中式工具管理器Actor"""
         import ray
         from envs.tool_manager.centralized.centralized_qwen3_manager import CentralizedToolActor
-        
-        logger = logging.getLogger('centralized_tool_actor')
-        logger.setLevel(logging.ERROR)
+
         # 只有rank 0的worker负责创建集中式Actor
         if self.rank == 0:
             try:
