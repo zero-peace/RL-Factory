@@ -60,19 +60,6 @@ class QwenManager(ToolManager):
         """
         name_or_short_name = str(name_or_short_name)
         return self.tool_map.get(name_or_short_name, None)
-        #name_or_short_name = str(name_or_short_name)
-        #if name_or_short_name in self.tool_map.keys():
-        #    print("matching found: ", name_or_short_name)
-        #    return self.tool_map[name_or_short_name]
-        #    #return self.tool_map.get(name_or_short_name, None)
-        #else:
-        #    for key in self.tool_map.keys():
-        #        print("matching: ", key, "-" + name_or_short_name)
-        #        # matching the 2nd half of the name
-        #        if "-" + name_or_short_name in key:
-        #            print(f"{name_or_short_name} not found, using {key} instead")
-        #            return self.tool_map[key]
-        #    return None
     
     @property
     def all_tools(self):
@@ -177,12 +164,12 @@ class QwenManager(ToolManager):
 {}""".format(tool["name"], args, str(e))
                 elif type(args) is str:
                     # Json decode error: xxx
-                    result = args
+                    result = 'parse json failed, argument is: {}'.format(args)
                 else:
                     result = 'Unexpected type of args: {} (args: {})'.format(type(args), args)
             else:
                 if tool['name'] == '<empty>':
-                    result = args
+                    result = 'toolname is empty, argument is: '.format(args)
                 else:
                     result = "# Failed to find the tool {} in the tool map".format(tool['name'])
 

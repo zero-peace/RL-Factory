@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 import asyncio
 import re
 import textwrap
@@ -10,7 +11,7 @@ import torch
 from json import JSONDecodeError
 from swift.llm import PtEngine, RequestConfig, Template, to_device
 from swift.llm.infer.protocol import ChatCompletionResponse
-from swift.plugin import ORM, orms, rm_plugins
+from swift.plugin import ORM, orms
 from swift.plugin.rm_plugin import DefaultRMPlugin
 from swift.utils import get_logger
 

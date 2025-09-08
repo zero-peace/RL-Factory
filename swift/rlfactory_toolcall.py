@@ -1,22 +1,13 @@
 import asyncio
-import re
-import textwrap
-from copy import deepcopy
-from typing import Dict, List, Optional
-
 import json
-import torch, os, sys
-import torch.distributed as dist
-from json import JSONDecodeError
-from swift.llm import PtEngine, RequestConfig, Template, to_device
-from swift.llm.infer.protocol import ChatCompletionResponse
+import os, sys
+import swift
 from swift.plugin import multi_turns
 from swift.plugin.multi_turn import MultiTurnScheduler
 from swift.utils import get_logger
-#from envs.utils.tool_utils import ToolUtils
 from envs import TOOL_ENV_REGISTRY
-import nest_asyncio
 
+import nest_asyncio
 nest_asyncio.apply()
 
 class ENV(object):
@@ -33,8 +24,8 @@ env_dict = {
     "name": "search",
     "mcp_mode": "stdio",
     "tool_manager": "qwen3",
-    "enable_thinking": False,
-    "config_path": "../envs/configs/sse_mcp_tools.pydata",
+    "enable_thinking": True,
+    "config_path": "./envs/configs/mcp_tools.pydata",
     "use_process_reward": False,
     "model_type": "qwen3",
     "tool_name_selected": [],      # selected tools for using when call a sse MCP server; default [] will call all tools
@@ -55,10 +46,14 @@ env_dict = {
       "num_instances": 3
     })
 }
+config_path = env_dict.get("config_path")
+if not os.path.exists(config_path):
+    print(f"Config file for toolcall not found: {config_path}")
+    sys.exit(1)
 
 # read from /workdir/toolcall_env.json or /tmp/toolcall_env.json
 env_dict_2 = {}
-locations = ["/workdir/toolcall_env.json", "/tmp/toolcall_env.json"]
+locations = ["./swift/toolcall_env.json"]
 for location in locations:
     if os.path.exists(location):
         with open(location, 'r') as f:
@@ -114,8 +109,11 @@ class RLFactoryToolcall(MultiTurnScheduler):
 
         step_score = self.env_object.get_step_reward([infer_request.messages[-1]['content']])
         #if '<tool_call>' in msg['content']:
+        #print("message: ", msg)
         if msg['role'] == 'assistant':
             res = self.env_object.step([msg['content']])
+            #print("res: ", res)
+            #print("")
             if asyncio.iscoroutine(res):
                 res = asyncio.get_event_loop().run_until_complete(res)
 
@@ -123,10 +121,20 @@ class RLFactoryToolcall(MultiTurnScheduler):
             infer_request.messages.append(next_obs[-1][-1])
 
             step_scores_full = self.env_object.get_step_reward(responses=[d['content'] for d in infer_request.messages])
+        else:
+            print("the last message is not assistant")
 
         extra_dict["rollout_reward"] = step_score
-        return {'infer_request': infer_request, 'rollout_infos': extra_dict}
+        if swift.version.__version__ <= '3.8.0':
+           return infer_request, extra_dict
+        else:
+            return {'infer_request': infer_request, 'rollout_infos': extra_dict}
         # for swift 3.7
         # return infer_request, extra_dict
 
 multi_turns['rlfactory_toolcall'] = RLFactoryToolcall
+
+
+if __name__ == "__main__":
+    rlf = RLFactoryToolcall()
+    rlf.env_object.step(['message <tool_call>{"name": "query_rag", "arguments": {"query": "who is the 14th president of nigeria"}}</tool_call>'])
