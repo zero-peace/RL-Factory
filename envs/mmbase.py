@@ -14,6 +14,21 @@ from copy import deepcopy
 
 
 class MMEnv(ABC): # Serves as the base environment for multimodal environments
+    """
+    Abstract base class for multimodal reinforcement learning environments in the RL-Factory framework.
+    
+    This class extends the basic environment functionality to support multimodal inputs,
+    particularly images, alongside text. It provides the core functionality for environment 
+    interaction, tool management, reward computation, and data processing in multimodal settings.
+    
+    Attributes:
+        tool_manager: Manages tool execution and interaction with multimodal language models
+        max_prompt_length (int): Maximum allowed length for prompts
+        use_verify_tool (bool): Flag indicating whether to use verification tools
+        use_process_reward (bool): Flag indicating whether to use process rewards
+        chat_template (str): Chat template for formatting conversations
+        processor: Processor for handling multimodal data (image/text)
+    """
     def __init__(self, config, centralized_actor=None):
         tool_manager_name = config.get('tool_manager', 'qwen3')
         # Check if a tool manager is specified

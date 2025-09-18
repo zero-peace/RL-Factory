@@ -10,6 +10,19 @@ from verl.utils.torch_functional import tokenize_and_postprocess_data
 from verl.protocol import pad_dataproto_to_divisor, unpad_dataproto
 
 class Env(ABC):
+    """
+    Abstract base class for reinforcement learning environments in the RL-Factory framework.
+    
+    This class provides the core functionality for environment interaction, tool management,
+    reward computation, and data processing. It supports both centralized and distributed
+    tool management modes, and can work with different language models.
+    
+    Attributes:
+        tool_manager: Manages tool execution and interaction with language models
+        max_prompt_length (int): Maximum allowed length for prompts
+        use_verify_tool (bool): Flag indicating whether to use verification tools
+        use_process_reward (bool): Flag indicating whether to use process rewards
+    """
     def __init__(self, config, centralized_actor=None):
         tool_manager_name = config.get('tool_manager')
         # Check if a tool manager is specified
