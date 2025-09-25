@@ -230,6 +230,7 @@ class MMEnv(ABC): # Serves as the base environment for multimodal environments
         return scores
 
     def get_prompt_for_reward(self, reward_tokenizer, data: DataProto):
+        """获取奖励模型使用的prompt"""
         reward_prompt_strs = []
         
         for i in range(len(data)):

@@ -49,7 +49,15 @@ def parse_mcp_tools_config(file_path):
         return None
 
 
-class Qwen25VLManager(ToolManager):    
+class Qwen25VLManager(ToolManager):  
+    """Qwen2.5-VL工具管理器
+    异步支持: 使用 asyncio 实现工具的并发执行，提高效率
+    图像处理: 内置完善的图像编解码功能，支持视觉任务
+    灵活解析: 支持多种响应格式解析，包括工具调用和直接回答
+    错误处理: 完善的异常捕获和错误信息返回机制
+    扩展性强: 支持多种工具注册方式和配置加载
+    
+    """  
     def __init__(self, verl_config):
         if isinstance(verl_config, dict):
             verl_config = OmegaConf.to_container(verl_config)

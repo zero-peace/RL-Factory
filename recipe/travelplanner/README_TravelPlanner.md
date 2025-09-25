@@ -30,5 +30,5 @@ Use the provided script to preprocess the TravelPlanner dataset:
 python scripts/travelplanner_preprocess.py --local_dir /path/to/raw/data --save_dir data/Travelplanner
 ```
 
-After processing, the data will be saved as `train.parquet` and `test.parquet` files, ready for training.
+Following the preprocessing step, the processed data will be output as `train.parquet` and `test.parquet` files that are ready to be fed into the training pipeline.
 
