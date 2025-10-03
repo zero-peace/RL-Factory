@@ -126,6 +126,7 @@ class MMEnv(ABC): # Serves as the base environment for multimodal environments
         return new_str
     
     def get_step_reward(self, responses, format_score=0.1):
+
         step_reward = [1] * len(responses)
         return step_reward 
     
@@ -139,6 +140,16 @@ class MMEnv(ABC): # Serves as the base environment for multimodal environments
         return temp_multi_modal_data, temp_image_data, temp_next_obs
     
     def step(self, responses, processor, image_data: List[List[Image.Image]]):
+        """执行环境步骤，根据模型响应和图像数据更新环境状态。
+        
+        Args:
+            responses: 模型生成的响应列表
+            processor: 模型处理器，用于处理图像数据
+            image_data: 输入的图像数据列表，每个元素为一个图像批次
+            
+        Returns:
+            包含更新后的观察、完成标志、有效操作、是否为工具调用、新图像数据、有效工具调用和原始提示的元组
+        """
         tokenizer = processor.tokenizer
         print("start to the env step", file=sys.stderr, flush=True)
         cur_actions, tool_results = self.tool_manager.execute_actions(responses=responses, image_data=image_data)

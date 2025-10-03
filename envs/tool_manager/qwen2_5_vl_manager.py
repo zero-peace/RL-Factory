@@ -59,6 +59,12 @@ class Qwen25VLManager(ToolManager):
     
     """  
     def __init__(self, verl_config):
+        """Qwen2.5-VL工具管理器
+        
+        Args:
+            verl_config: 配置文件
+        """
+
         if isinstance(verl_config, dict):
             verl_config = OmegaConf.to_container(verl_config)
         super().__init__(verl_config)
@@ -77,10 +83,26 @@ class Qwen25VLManager(ToolManager):
 
         
     def modify(self, name):
+        """截取字符串的前一半，用于生成函数名称
+        
+        Args:
+            name: 函数名称
+            
+        Returns:
+            截取后的字符串
+        """
         length = len(name)//2
         return name[0:length]
     
     def _load_custom_chat_template(self, tokenizer):
+        """加载自定义的聊天模板
+        
+        Args:
+            tokenizer: 模型分词器
+            
+        Returns:
+            加载后的分词器
+        """
         self.chat_template_path = self.verl_config.get('load_custom_chat_template', None)
         if self.chat_template_path:
             print_rank_0(f"load chat template from {self.chat_template_path}")
